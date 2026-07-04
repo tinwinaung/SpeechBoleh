@@ -28,6 +28,55 @@ I have included Whisper.cpp and Piper directly in the package to handle local CP
 
 ---
 
+## 👉 Run Directly from Source
+
+To run the application directly from the source code, you need to have Node.js installed on your system. The application uses Electron.js to wrap the web interface and Node.js to power backend services.
+
+### Prerequisites:
+Before you begin, ensure you have the following installed:
+
+1. **Node.js**: v20.x LTS or [higher](https://nodejs.org/en/download/current) (You can skip Step 4 below by installing the native build tools during this step.)
+2. **npm**: v10.x or higher (Optional)
+3. **Git**: For version control (Optional)
+4. **Visual Studio Build Tools** (for Windows development):
+   - Install the "Desktop development with C++" workload
+   - Include the "MSVC v143 - VS 2022 C++ x64/x86 build tools" optional component
+
+### Installation:
+
+1. **Clone the repository**:
+   This is not required if you download zip file from [release](https://github.com/tinwinaung/SpeechBoleh/releases) or [repo](https://github.com/tinwinaung/SpeechBoleh/archive/refs/heads/main.zip).
+
+   ```bash
+   git clone <repository-url>
+   cd SpeechBoleh
+   ```
+
+2. **Install dependencies**:
+   This is required before you run `npm start` or `npm run dist`.
+   
+   ```bash
+   npm install
+   ```
+
+### Development:
+
+1. **Start the application**:
+   ```bash
+   npm start
+   ```
+
+### Distribution (Create Installer and Portable App)
+
+First, you need to install the dependencies (as shown above).
+Then, you can run the following command to create a release build:
+
+```bash
+npm run dist
+```
+
+---
+
 ## 🛠️ Technology Stack
 
 ### 1. Frontend & Core Layout

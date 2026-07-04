@@ -145,4 +145,6 @@ vite.config.ts.timestamp-*
 dist/
 bin/*
 SpeechBoleh.zip
+SpeechBoleh*.zip
 SpeechBoleh/
+tmp/*
