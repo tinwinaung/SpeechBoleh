@@ -1,0 +1,357 @@
+/* Elegant Premium Dark Theme CSS for STT & TTS Pipeline Client */
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Outfit:wght@300;400;500;600;700&display=swap');
+
+:root {
+  --bg-darker: #090d16;
+  --bg-dark: #0f172a;
+  --bg-card: #1e293b;
+  --accent-cyan: #06b6d4;
+  --accent-purple: #8b5cf6;
+  --accent-green: #10b981;
+  --accent-pink: #ec4899;
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --border-glass: rgba(255, 255, 255, 0.08);
+}
+
+body {
+  font-family: 'Outfit', sans-serif;
+  background-color: var(--bg-darker);
+  color: var(--text-primary);
+  height: 100vh;
+  margin: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Scrollbar customization */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-cyan);
+}
+
+/* Glassmorphism containers */
+.glass-container {
+  background: radial-gradient(100% 100% at 0% 0%, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.8) 100%);
+  border: 1px solid var(--border-glass);
+  backdrop-filter: blur(16px);
+  border-radius: 16px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  height: 100%;
+}
+
+.glass-card {
+  background: rgba(30, 41, 59, 0.4);
+  border: 1px solid var(--border-glass);
+  border-radius: 12px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.glass-card:hover {
+  border-color: rgba(6, 182, 212, 0.3);
+  box-shadow: 0 8px 24px rgba(6, 182, 212, 0.05);
+}
+
+/* Custom visual text area */
+.custom-textarea {
+  background-color: rgba(9, 13, 22, 0.6) !important;
+  color: #e2e8f0 !important;
+  border: 1px solid var(--border-glass) !important;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  resize: none;
+  border-radius: 10px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.custom-textarea:focus {
+  border-color: var(--accent-cyan) !important;
+  box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.15) !important;
+  outline: none;
+}
+
+/* Buttons */
+.btn-cyan {
+  background: linear-gradient(135deg, #0891b2 0%, #06b6d4 100%);
+  color: #fff;
+  border: none;
+  font-weight: 500;
+  box-shadow: 0 4px 12px rgba(6, 182, 212, 0.2);
+  transition: all 0.2s ease;
+}
+.btn-cyan:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(6, 182, 212, 0.35);
+  color: #fff;
+}
+.btn-cyan:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.btn-purple {
+  background: linear-gradient(135deg, #7c3aed 0%, #8b5cf6 100%);
+  color: #fff;
+  border: none;
+  font-weight: 500;
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.2);
+  transition: all 0.2s ease;
+}
+.btn-purple:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(139, 92, 246, 0.35);
+  color: #fff;
+}
+
+/* Pulse recording button animation */
+.record-btn-wrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.btn-record {
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%);
+  color: #fff;
+  border: 4px solid rgba(255, 255, 255, 0.1);
+  font-size: 1.8rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  box-shadow: 0 6px 20px rgba(239, 68, 68, 0.4);
+}
+
+.btn-record.recording {
+  background: linear-gradient(135deg, #ef4444 0%, #f43f5e 100%);
+  animation: pulse-ring 1.5s infinite;
+  box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
+  transform: scale(0.95);
+}
+
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 16px rgba(239, 68, 68, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+  }
+}
+
+/* Drag & Drop Zone */
+.drag-drop-zone {
+  border: 2px dashed rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  padding: 2.5rem 1.5rem;
+  text-align: center;
+  background: rgba(30, 41, 59, 0.2);
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.drag-drop-zone:hover, .drag-drop-zone.dragover {
+  border-color: var(--accent-cyan);
+  background: rgba(6, 182, 212, 0.05);
+}
+
+/* Tab Headers */
+.custom-nav-tabs {
+  border-bottom: 1px solid var(--border-glass) !important;
+}
+
+.custom-nav-tabs .nav-link {
+  color: var(--text-secondary);
+  border: none !important;
+  font-weight: 500;
+  padding: 0.6rem 1.2rem;
+  position: relative;
+  background: transparent !important;
+}
+
+.custom-nav-tabs .nav-link.active {
+  color: var(--accent-cyan) !important;
+}
+
+.custom-nav-tabs .nav-link.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background-color: var(--accent-cyan);
+}
+
+/* Custom Audio Player */
+.custom-audio-player {
+  background: rgba(9, 13, 22, 0.7);
+  border: 1px solid var(--border-glass);
+  border-radius: 12px;
+  padding: 1rem;
+}
+
+.player-progress {
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  cursor: pointer;
+  position: relative;
+}
+
+.player-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-cyan), var(--accent-purple));
+  border-radius: 3px;
+  width: 0%;
+}
+
+/* Wave visualizer lines during mic recording */
+.visualizer-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  height: 32px;
+}
+
+.visual-bar {
+  width: 3px;
+  height: 6px;
+  background-color: var(--accent-cyan);
+  border-radius: 2px;
+  transition: height 0.1s ease;
+}
+
+.visual-bar.recording {
+  animation: bounce 0.8s ease-in-out infinite alternate;
+}
+
+@keyframes bounce {
+  10% { height: 10px; }
+  30% { height: 28px; }
+  60% { height: 14px; }
+  90% { height: 32px; }
+  100% { height: 8px; }
+}
+
+/* Status Indicators */
+.indicator {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.8rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 50px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-glass);
+  color: var(--text-secondary);
+}
+
+.indicator-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 6px;
+}
+
+.dot-green { background-color: var(--accent-green); box-shadow: 0 0 8px var(--accent-green); }
+.dot-purple { background-color: var(--accent-purple); box-shadow: 0 0 8px var(--accent-purple); }
+.dot-cyan { background-color: var(--accent-cyan); box-shadow: 0 0 8px var(--accent-cyan); }
+.dot-orange { background-color: #f97316; box-shadow: 0 0 8px #f97316; }
+
+/* Status Text Overlay */
+.loading-overlay {
+  display: none;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(4px);
+  z-index: 10;
+  border-radius: 12px;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+}
+
+/* Custom outline button for cyan */
+.btn-outline-cyan {
+  border: 1px solid var(--accent-cyan) !important;
+  color: var(--accent-cyan) !important;
+  background: transparent !important;
+  transition: all 0.2s ease;
+}
+
+.btn-outline-cyan:hover:not(:disabled) {
+  background: var(--accent-cyan) !important;
+  color: #fff !important;
+  box-shadow: 0 0 12px rgba(6, 182, 212, 0.4);
+}
+
+.btn-outline-cyan:disabled {
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  color: rgba(255, 255, 255, 0.2) !important;
+  cursor: not-allowed;
+}
+
+/* Custom premium styling for the speech rate range slider */
+.custom-range-purple::-webkit-slider-thumb {
+  background: var(--accent-purple) !important;
+  box-shadow: 0 0 10px rgba(168, 85, 247, 0.5) !important;
+}
+
+.custom-range-purple::-moz-range-thumb {
+  background: var(--accent-purple) !important;
+  box-shadow: 0 0 10px rgba(168, 85, 247, 0.5) !important;
+}
+
+.custom-range-purple::-webkit-slider-runnable-track {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.custom-range-purple::-moz-range-track {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Fullscreen Textarea Modes (STT and TTS) */
+#stt-output-container.fullscreen-active,
+#tts-input-container.fullscreen-active {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  z-index: 9999 !important;
+  background: radial-gradient(circle at top left, #121218 0%, #060608 100%) !important;
+  padding: 3rem !important;
+  margin: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: flex-start !important;
+}
+
+#stt-output-container.fullscreen-active textarea,
+#tts-input-container.fullscreen-active textarea {
+  flex-grow: 1 !important;
+  height: calc(100vh - 150px) !important;
+  font-size: 1.15rem !important;
+  line-height: 1.7 !important;
+  resize: none !important;
+}

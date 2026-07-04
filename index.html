@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SpeechBoleh (Beta)</title>
+  <!-- Bootstrap 5 CSS CDN -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Bootstrap Icons CDN -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+  <!-- Core Design CSS -->
+  <link rel="stylesheet" href="./index.css">
+</head>
+
+<body>
+
+  <!-- Header Section -->
+  <header
+    class="py-3 px-4 border-bottom border-secondary border-opacity-10 d-flex justify-content-between align-items-center bg-dark bg-opacity-30">
+    <div class="d-flex align-items-center">
+      <div class="bg-gradient bg-cyan p-2 rounded-3 me-3 d-flex align-items-center justify-content-center"
+        style="width: 42px; height: 42px; background: linear-gradient(135deg, #06b6d4, #8b5cf6);">
+        <i class="bi bi-soundwave text-white fs-4"></i>
+      </div>
+      <div>
+        <h1 class="h5 m-0 fw-bold tracking-tight d-flex align-items-center">
+          SpeechBoleh
+          <span class="badge bg-warning bg-opacity-20 text-primary border border-secondary border-opacity-10 ms-2"
+            style="font-size: 0.65rem; font-weight: 500; padding: 0.2rem 0.4rem; vertical-align: middle;">Beta
+            v0.5.0</span>
+        </h1>
+        <p class="small text-secondary m-0" style="font-size: 0.75rem;">Powered by Whisper.cpp & Piper Engine</p>
+      </div>
+    </div>
+    <div class="d-flex align-items-center">
+      <span
+        class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-10 fs-8 py-1.5 px-3 rounded-pill font-monospace"><i
+          class="bi bi-shield-fill-check me-1"></i>Fully Offline</span>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="flex-grow-1 p-4 overflow-auto d-flex flex-column gap-4">
+    <div class="row g-4 flex-shrink-0">
+
+      <!-- LEFT COLUMN: Speech-to-Text (STT) -->
+      <div class="col-lg-6">
+        <div class="glass-container p-4">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h2 class="h5 m-0 fw-semibold d-flex align-items-center">
+              <i class="bi bi-mic text-cyan me-2"></i>Speech-to-Text Pipeline
+            </h2>
+            <span class="indicator"><span class="indicator-dot dot-cyan"></span>Whisper Ready</span>
+          </div>
+
+          <!-- Whisper Model Setup -->
+          <div class="row g-3 mb-3">
+            <div class="col-12">
+              <label for="model-select" class="form-label small text-secondary fw-semibold">Select Offline Whisper
+                Model</label>
+              <div class="input-group input-group-sm">
+                <span class="input-group-text bg-dark border-secondary border-opacity-20 text-secondary"><i
+                    class="bi bi-cpu-fill"></i></span>
+                <select id="model-select" class="form-select bg-dark text-white border-secondary border-opacity-20">
+                  <option value="ggml-tiny.bin">Tiny Model (75MB)</option>
+                  <option value="ggml-base.bin" selected>Base Model (142MB) [Default]</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- STT Inputs Tabs -->
+          <ul class="nav nav-tabs custom-nav-tabs mb-4" id="sttTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+              <button class="nav-link active" id="mic-tab" data-bs-toggle="tab" data-bs-target="#mic-content"
+                type="button" role="tab" aria-selected="true">
+                <i class="bi bi-mic-fill me-2"></i>Microphone
+              </button>
+            </li>
+            <li class="nav-item" role="presentation">
+              <button class="nav-link" id="upload-tab" data-bs-toggle="tab" data-bs-target="#upload-content"
+                type="button" role="tab" aria-selected="false">
+                <i class="bi bi-file-earmark-music-fill me-2"></i>Audio File
+              </button>
+            </li>
+          </ul>
+
+          <div class="tab-content position-relative" id="sttTabsContent">
+            <!-- Loading/Processing Overlay -->
+            <div id="stt-loading-overlay" class="loading-overlay">
+              <div class="spinner-border text-cyan mb-3" role="status" style="width: 3rem; height: 3rem;"></div>
+              <h5 class="fw-semibold text-white mb-1">Transcribing Audio</h5>
+              <p class="small text-secondary text-center px-4">Whisper.cpp model is analyzing soundwaves offline. This
+                might take a few moments...</p>
+            </div>
+
+            <!-- Model Download Progress Overlay -->
+            <div id="model-download-overlay" class="loading-overlay">
+              <div class="spinner-border text-cyan mb-3" role="status" style="width: 3rem; height: 3rem;"></div>
+              <h5 class="fw-semibold text-white mb-1" id="download-title">Downloading Whisper Model</h5>
+              <p class="small text-secondary text-center px-4 mb-3">Fetching weights directly from Hugging Face offline
+                cache...</p>
+              <div class="w-75 mx-auto">
+                <div class="progress bg-dark" style="height: 10px; border-radius: 5px; overflow: hidden;">
+                  <div id="download-progress-bar"
+                    class="progress-bar progress-bar-striped progress-bar-animated bg-cyan" role="progressbar"
+                    style="width: 0%"></div>
+                </div>
+                <div class="d-flex justify-content-between mt-2 px-1">
+                  <span class="small text-secondary font-monospace" id="download-bytes" style="font-size: 0.75rem;">0 /
+                    0 MB</span>
+                  <span class="small text-cyan font-monospace" id="download-pct" style="font-size: 0.75rem;">0%</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- TAB 1: System Microphone -->
+            <div class="tab-pane fade show active h-100" id="mic-content" role="tabpanel" aria-labelledby="mic-tab">
+              <div class="d-flex flex-column align-items-center justify-content-center py-4 h-100 text-center">
+
+                <!-- Mic Visual Wave Animation -->
+                <div class="visualizer-container mb-4" id="recording-visualizer">
+                  <div class="visual-bar"></div>
+                  <div class="visual-bar"></div>
+                  <div class="visual-bar"></div>
+                  <div class="visual-bar"></div>
+                  <div class="visual-bar"></div>
+                  <div class="visual-bar"></div>
+                  <div class="visual-bar"></div>
+                  <div class="visual-bar"></div>
+                  <div class="visual-bar"></div>
+                  <div class="visual-bar"></div>
+                  <div class="visual-bar"></div>
+                </div>
+
+                <!-- Main Recording Action -->
+                <div class="d-flex align-items-center gap-3 mb-3">
+                  <button id="btn-toggle-record" class="btn btn-record" title="Start Recording">
+                    <i class="bi bi-mic-fill" id="record-icon"></i>
+                  </button>
+                  <button id="btn-play-mic"
+                    class="btn btn-outline-cyan rounded-circle d-flex align-items-center justify-content-center"
+                    style="width: 48px; height: 48px;" title="Play Back Last Recording" disabled>
+                    <i class="bi bi-play-fill fs-5" id="play-mic-icon"></i>
+                  </button>
+                </div>
+
+                <h6 id="record-status" class="fw-semibold text-white mb-1">Microphone Standby</h6>
+                <p id="record-timer" class="font-monospace text-secondary mb-4">00:00.0</p>
+
+                <!-- Recording Status bar -->
+                <div class="w-70 px-4" style="max-width: 320px;">
+                  <div class="progress bg-dark" style="height: 6px; display: none;" id="record-progress-container">
+                    <div id="record-progress" class="progress-bar progress-bar-striped progress-bar-animated bg-danger"
+                      role="progressbar" style="width: 100%"></div>
+                  </div>
+                </div>
+
+                <!-- Input Selector -->
+                <div class="w-100 px-4 mt-3" style="max-width: 320px;">
+                  <div class="input-group input-group-sm">
+                    <span class="input-group-text bg-dark border-secondary border-opacity-20 text-secondary"><i
+                        class="bi bi-mic"></i></span>
+                    <select id="mic-select" class="form-select bg-dark text-white border-secondary border-opacity-20"
+                      style="font-size: 0.8rem;">
+                      <option value="">Default Microphone</option>
+                    </select>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- TAB 2: Audio File Upload -->
+            <div class="tab-pane fade h-100" id="upload-content" role="tabpanel" aria-labelledby="upload-tab">
+              <div class="d-flex flex-column align-items-center justify-content-center h-100">
+                <div id="audio-drop-zone" class="drag-drop-zone w-100 my-auto">
+                  <i class="bi bi-cloud-arrow-up text-cyan display-4 mb-3 d-block"></i>
+                  <h6 class="fw-semibold text-white">Drag & drop audio file here</h6>
+                  <p class="small text-secondary mb-3">Supports .mp3, .wav, .m4a</p>
+                  <button class="btn btn-sm btn-outline-secondary px-3"
+                    onclick="document.getElementById('audio-file-picker').click()">
+                    Browse Files
+                  </button>
+                  <input type="file" id="audio-file-picker" accept=".mp3,.wav,.m4a" class="d-none">
+                </div>
+                <div id="selected-file-info" class="w-100 p-3 mt-3 glass-card d-none">
+                  <div class="d-flex justify-content-between align-items-center">
+                    <div class="d-flex align-items-center overflow-hidden">
+                      <i class="bi bi-file-earmark-music-fill text-cyan fs-4 me-3"></i>
+                      <div class="text-truncate">
+                        <p class="small fw-semibold text-white m-0 text-truncate" id="upload-filename">audio.mp3</p>
+                        <span class="small text-secondary font-monospace" id="upload-filesize"
+                          style="font-size: 0.75rem;">1.2 MB</span>
+                      </div>
+                    </div>
+                    <button class="btn btn-sm btn-cyan px-3" id="btn-process-upload">
+                      Transcribe <i class="bi bi-arrow-right-short ms-1"></i>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Placeholder to preserve position when moving element to body for fullscreen -->
+          <div id="stt-placeholder" class="d-none"></div>
+          <!-- Transcript Result Output -->
+          <div class="mt-4" id="stt-output-container">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <label for="stt-output" class="small text-secondary fw-semibold">Transcribed Transcription</label>
+              <div class="d-flex gap-3 align-items-center">
+                <span class="small text-secondary font-monospace" id="stt-char-count">0 characters</span>
+                <button class="btn btn-link p-0 text-decoration-none text-cyan small" id="btn-fullscreen-stt"
+                  title="Toggle Fullscreen">
+                  <i class="bi bi-arrows-fullscreen me-1"></i>Fullscreen
+                </button>
+                <button class="btn btn-link p-0 text-decoration-none text-cyan small" id="btn-copy-stt"
+                  title="Copy Transcript" disabled>
+                  <i class="bi bi-copy me-1"></i>Copy
+                </button>
+              </div>
+            </div>
+            <textarea id="stt-output" class="form-control custom-textarea w-100 p-3" rows="5"
+              placeholder="Speech transcription results will appear here in real-time..." readonly></textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT COLUMN: Text-to-Speech (TTS) -->
+      <div class="col-lg-6">
+        <div class="glass-container p-4">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h2 class="h5 m-0 fw-semibold d-flex align-items-center">
+              <i class="bi bi-megaphone text-purple me-2"></i>Speech Synthesis Engine
+            </h2>
+            <span class="indicator"><span class="indicator-dot dot-purple"></span>Piper Speech</span>
+          </div>
+
+          <!-- Voice & Configuration Setup -->
+          <div class="row g-3 mb-3">
+            <div class="col-12">
+              <label for="voice-select" class="form-label small text-secondary fw-semibold">Select Offline Piper Neural
+                Voice</label>
+              <div class="input-group input-group-sm">
+                <span class="input-group-text bg-dark border-secondary border-opacity-20 text-secondary"><i
+                    class="bi bi-person-fill-gear"></i></span>
+                <select id="voice-select" class="form-select bg-dark text-white border-secondary border-opacity-20">
+                  <option value="en_US-lessac-medium.onnx">Lessac (Medium, Female) [Default]</option>
+                  <option value="en_US-joe-medium.onnx">Joe (Medium, Male)</option>
+                  <option value="en_US-ryan-medium.onnx">Ryan (Medium, Male)</option>
+                </select>
+              </div>
+            </div>
+            <div class="col-12 mt-1">
+              <div class="d-flex justify-content-between align-items-center mb-1">
+                <label for="speed-slider" class="form-label small text-secondary fw-semibold mb-0">Speech Speed
+                  (Rate)</label>
+                <span id="speed-value" class="badge bg-purple bg-opacity-10 text-purple font-monospace">1.0x</span>
+              </div>
+              <div class="d-flex align-items-center gap-3">
+                <span class="small text-secondary"><i class="bi bi-tortoise-fill"></i></span>
+                <input type="range" class="form-range custom-range-purple flex-grow-1" id="speed-slider" min="0.5"
+                  max="2.0" step="0.1" value="1.0">
+                <span class="small text-secondary"><i class="bi bi-rabbit-fill"></i></span>
+              </div>
+            </div>
+
+            <!-- Advanced controls link -->
+            <div class="col-12 mt-2">
+              <button class="btn btn-link p-0 text-decoration-none text-purple small fw-semibold" type="button"
+                data-bs-toggle="collapse" data-bs-target="#advancedTtsSettings" aria-expanded="false"
+                aria-controls="advancedTtsSettings">
+                <i class="bi bi-sliders me-1"></i> Advanced Voice Parameters
+              </button>
+
+              <div class="collapse mt-2" id="advancedTtsSettings">
+                <div class="p-3 bg-dark bg-opacity-25 rounded-3 border border-secondary border-opacity-10">
+                  <!-- Sentence Silence -->
+                  <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                      <label for="silence-slider" class="form-label small text-secondary fw-semibold mb-0">Sentence
+                        Silence (Pauses)</label>
+                      <span id="silence-value"
+                        class="badge bg-purple bg-opacity-10 text-purple font-monospace">0.2s</span>
+                    </div>
+                    <input type="range" class="form-range custom-range-purple" id="silence-slider" min="0.0" max="3.0"
+                      step="0.1" value="0.2">
+                  </div>
+
+                  <!-- Noise Scale -->
+                  <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                      <label for="noise-scale-slider" class="form-label small text-secondary fw-semibold mb-0">Noise
+                        Scale (Tone Variance)</label>
+                      <span id="noise-scale-value"
+                        class="badge bg-purple bg-opacity-10 text-purple font-monospace">0.67</span>
+                    </div>
+                    <input type="range" class="form-range custom-range-purple" id="noise-scale-slider" min="0.0"
+                      max="1.5" step="0.05" value="0.67">
+                  </div>
+
+                  <!-- Noise W -->
+                  <div class="mb-0">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                      <label for="noise-w-slider" class="form-label small text-secondary fw-semibold mb-0">Phoneme Noise
+                        W (Cadence)</label>
+                      <span id="noise-w-value"
+                        class="badge bg-purple bg-opacity-10 text-purple font-monospace">0.80</span>
+                    </div>
+                    <input type="range" class="form-range custom-range-purple" id="noise-w-slider" min="0.0" max="1.5"
+                      step="0.05" value="0.80">
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Placeholder to preserve position when moving element to body for fullscreen -->
+          <div id="tts-placeholder" class="d-none"></div>
+          <!-- Input Text Area -->
+          <div class="mt-3 position-relative" id="tts-input-container">
+
+            <!-- TTS Processing Overlay -->
+            <div id="tts-loading-overlay" class="loading-overlay">
+              <div class="spinner-border text-purple mb-3" role="status" style="width: 3rem; height: 3rem;"></div>
+              <h5 class="fw-semibold text-white mb-1">Generating Voice Asset</h5>
+              <p class="small text-secondary text-center px-4">Creating wave speech file locally. SAPI synthesis is
+                processing standard inputs...</p>
+            </div>
+
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <label for="tts-input" class="small text-secondary fw-semibold">Text Input Source</label>
+              <div class="d-flex gap-3 align-items-center">
+                <button class="btn btn-link p-0 text-decoration-none text-purple small" id="btn-fullscreen-tts"
+                  title="Toggle Fullscreen">
+                  <i class="bi bi-arrows-fullscreen me-1"></i>Fullscreen
+                </button>
+                <button class="btn btn-link p-0 text-decoration-none text-purple small" id="btn-paste-tts"
+                  title="Paste from Clipboard">
+                  <i class="bi bi-clipboard me-1"></i>Paste
+                </button>
+                <button class="btn btn-link p-0 text-decoration-none text-purple small" id="btn-upload-text"
+                  onclick="document.getElementById('text-file-picker').click()">
+                  <i class="bi bi-filetype-txt me-1"></i>Import .txt file
+                </button>
+              </div>
+              <input type="file" id="text-file-picker" accept=".txt" class="d-none">
+            </div>
+
+            <!-- Text file import alert box -->
+            <div id="text-import-alert"
+              class="alert alert-purple bg-purple bg-opacity-10 border-purple border-opacity-20 text-purple-light p-2 mb-2 d-none d-flex justify-content-between align-items-center small"
+              style="border-radius: 8px;">
+              <span class="text-truncate me-2"><i class="bi bi-check-circle-fill me-2"></i>Imported: <strong
+                  id="imported-txt-filename">text.txt</strong></span>
+              <button type="button" class="btn-close btn-close-white btn-close-sm" style="font-size:0.65rem;"
+                onclick="clearTextImport()"></button>
+            </div>
+
+            <textarea id="tts-input" class="form-control custom-textarea w-100 p-3" rows="5"
+              placeholder="Type text directly here or drag & drop/import a .txt file, then click Synthesize..."></textarea>
+          </div>
+
+          <!-- Synthesis Trigger Button -->
+          <div class="mt-3 mb-4">
+            <button id="btn-synthesize"
+              class="btn btn-purple w-100 py-2.5 d-flex align-items-center justify-content-center">
+              <i class="bi bi-play-circle-fill me-2 fs-5"></i>Synthesize Speech
+            </button>
+          </div>
+
+          <!-- Custom Playback Engine -->
+          <div class="glass-card p-3 mt-3">
+            <label class="small text-secondary fw-semibold mb-2 d-block">Generated Audio Playback</label>
+
+            <div class="custom-audio-player">
+              <!-- Progress Slider -->
+              <div class="player-progress mb-3" id="player-progress-area">
+                <div class="player-progress-bar" id="player-bar"></div>
+              </div>
+
+              <div class="d-flex align-items-center justify-content-between">
+                <!-- Controls -->
+                <div class="d-flex align-items-center gap-3">
+                  <button id="btn-play-pause"
+                    class="btn btn-sm btn-outline-light rounded-circle d-flex align-items-center justify-content-center"
+                    style="width: 36px; height: 36px;" disabled>
+                    <i class="bi bi-play-fill fs-5" id="play-icon"></i>
+                  </button>
+                  <div class="small text-secondary font-monospace" id="player-time">00:00 / 00:00</div>
+                </div>
+
+                <!-- Wave details -->
+                <div class="text-end text-truncate px-2" style="max-width: 240px;">
+                  <span class="small text-white text-truncate d-block fw-semibold" id="player-filename"
+                    style="font-size: 0.75rem;">No track generated</span>
+                  <span class="small text-secondary font-monospace" id="player-filesize"
+                    style="font-size: 0.7rem;"></span>
+                </div>
+              </div>
+            </div>
+            <!-- Hidden Audio Element -->
+            <audio id="audio-playback-element"></audio>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Activity Log Panel (Responsive Fill-Height) -->
+    <div class="row g-4 flex-grow-1 mb-3" style="min-height: 180px;">
+      <div class="col-12 h-100">
+        <div class="glass-container p-4 h-100 d-flex flex-column">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <h2 class="h6 m-0 fw-semibold d-flex align-items-center text-white">
+              <i class="bi bi-terminal text-cyan me-2"></i>Activity Log Console
+            </h2>
+            <button id="btn-clear-logs" class="btn btn-link p-0 text-decoration-none text-cyan small fw-semibold"
+              style="font-size: 0.75rem;">
+              <i class="bi bi-trash3 me-1"></i>Clear Logs
+            </button>
+          </div>
+
+          <div id="log-console"
+            class="flex-grow-1 bg-dark bg-opacity-50 rounded-3 p-3 border border-secondary border-opacity-10 font-monospace overflow-auto text-white-50"
+            style="min-height: 120px; font-size: 0.75rem; line-height: 1.6;">
+            <div class="text-info">[System] Offline SpeechBoleh Logger Active.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Footer System Status -->
+  <footer
+    class="py-2 px-4 border-top border-secondary border-opacity-10 d-flex justify-content-between align-items-center bg-dark bg-opacity-40">
+    <div class="d-flex align-items-center overflow-hidden">
+      <i class="bi bi-shield-check text-cyan me-2 small"></i>
+      <span class="small text-secondary text-truncate" id="status-console" style="font-size: 0.75rem;">System
+        initialized. Local STT/TTS ready.</span>
+    </div>
+    <div class="small text-secondary font-monospace" style="font-size: 0.7rem;">v1.0.0 (Win64)</div>
+  </footer>
+
+  <!-- Bootstrap 5 JavaScript Bundle CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <!-- Main Frontend Application Logic -->
+  <script src="./renderer.js"></script>
+</body>
+
+</html>
