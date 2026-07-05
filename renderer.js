@@ -119,12 +119,14 @@ async function checkAndSetupFirstRun() {
   logStatus('Checking system dependencies...', 'info');
   try {
     const deps = await window.api.checkDependencies();
-    
+
     // Determine what needs to be downloaded
     const missingFfmpeg = !deps.ffmpeg;
     const missingPiper = !deps.piperEngine;
     const missingWhisper = !deps.whisperEngine;
-    
+
+    logStatus(`Dependency status: FFmpeg=${deps.ffmpeg}, Piper=${deps.piperEngine}, Whisper=${deps.whisperEngine}`);
+
     // Check Whisper models
     let missingWhisperModel = false;
     try {
@@ -135,7 +137,7 @@ async function checkAndSetupFirstRun() {
     } catch (e) {
       missingWhisperModel = true;
     }
-    
+
     // Check Piper voices
     let missingPiperVoice = false;
     try {
@@ -147,19 +149,20 @@ async function checkAndSetupFirstRun() {
       missingPiperVoice = true;
     }
 
-    const needsSetup = missingFfmpeg || missingPiper || missingWhisper || missingWhisperModel || missingPiperVoice;
+    // Only trigger first-run setup if the core executable binaries themselves do not exist
+    const needsSetup = missingFfmpeg || missingPiper || missingWhisper;
 
     if (!needsSetup) {
-      logStatus('All core engines and models are present.', 'success');
+      logStatus('All core engine binaries are present.', 'success');
       return;
     }
 
     logStatus('First-run dependencies missing. Launching automatic setup...', 'warning');
-    
+
     // Show download overlay dialog modal
     modelDownloadOverlay.style.display = 'flex';
     modelDownloadOverlay.classList.remove('d-none');
-    
+
     const descEl = modelDownloadOverlay.querySelector('p');
     const originalDesc = descEl ? descEl.innerText : '';
 
@@ -171,7 +174,7 @@ async function checkAndSetupFirstRun() {
       downloadProgressBar.style.width = '0%';
       downloadPct.innerText = '0%';
       downloadBytes.innerText = 'Initializing...';
-      
+
       const res = await window.api.downloadFfmpeg();
       if (!res.success) {
         throw new Error(`FFmpeg setup failed: ${res.error}`);
@@ -187,7 +190,7 @@ async function checkAndSetupFirstRun() {
       downloadProgressBar.style.width = '0%';
       downloadPct.innerText = '0%';
       downloadBytes.innerText = 'Initializing...';
-      
+
       const res = await window.api.downloadPiper();
       if (!res.success) {
         throw new Error(`Piper Engine setup failed: ${res.error}`);
@@ -204,7 +207,7 @@ async function checkAndSetupFirstRun() {
       downloadProgressBar.style.width = '0%';
       downloadPct.innerText = '0%';
       downloadBytes.innerText = 'Initializing...';
-      
+
       const res = await window.api.downloadWhisperEngine();
       if (!res.success) {
         throw new Error(`Whisper Engine setup failed: ${res.error}`);
@@ -222,14 +225,14 @@ async function checkAndSetupFirstRun() {
       downloadProgressBar.style.width = '0%';
       downloadPct.innerText = '0%';
       downloadBytes.innerText = 'Initializing...';
-      
+
       // Register temporary progress listeners
       window.api.onDownloadProgress((data) => {
         downloadProgressBar.style.width = `${data.percentage}%`;
         downloadPct.innerText = `${data.percentage}%`;
         downloadBytes.innerText = `Downloaded ${formatBytes(data.downloaded)} / ${formatBytes(data.total)}`;
       });
-      
+
       const res = await window.api.downloadModel(defaultModel);
       if (!res.success) {
         throw new Error(`Whisper model setup failed: ${res.error}`);
@@ -250,14 +253,14 @@ async function checkAndSetupFirstRun() {
       downloadProgressBar.style.width = '0%';
       downloadPct.innerText = '0%';
       downloadBytes.innerText = 'Initializing...';
-      
+
       // Register temporary progress listeners
       window.api.onVoiceDownloadProgress((data) => {
         downloadProgressBar.style.width = `${data.percentage}%`;
         downloadPct.innerText = `${data.percentage}%`;
         downloadBytes.innerText = `Downloaded ${formatBytes(data.downloaded)} / ${formatBytes(data.total)}`;
       });
-      
+
       const res = await window.api.downloadVoiceModel(defaultVoice);
       if (!res.success) {
         throw new Error(`Piper voice setup failed: ${res.error}`);
@@ -276,7 +279,7 @@ async function checkAndSetupFirstRun() {
     // Hide overlay and restore default texts
     modelDownloadOverlay.style.display = 'none';
     modelDownloadOverlay.classList.add('d-none');
-    
+
     // Reset overlay titles to standard models
     downloadTitle.innerText = "Downloading Model";
   }
@@ -424,11 +427,17 @@ async function populateMics() {
 }
 
 async function triggerFfmpegDownloadFlow() {
+  const deps = await window.api.checkDependencies();
+  if (deps.ffmpeg) {
+    //alert("FFmpeg is already downloaded and configured in your bin folder!");
+    return;
+  }
+
   const choice = confirm("This action will download and extract the latest FFmpeg Essentials build (approx. 90MB) from gyan.dev directly into your bin/ folder.\n\nAre you sure you want to download and install FFmpeg now?");
   if (!choice) return;
 
   logStatus("Starting FFmpeg download & installation process...", "system");
-  
+
   // Show the download progress overlay
   downloadTitle.innerText = "Downloading FFmpeg";
   const descEl = modelDownloadOverlay.querySelector('p');
@@ -460,6 +469,12 @@ async function triggerFfmpegDownloadFlow() {
 }
 
 async function triggerPiperDownloadFlow() {
+  const deps = await window.api.checkDependencies();
+  if (deps.piperEngine) {
+    //alert("Piper Engine is already downloaded and configured in your bin folder!");
+    return;
+  }
+
   const choice = confirm("This action will download and extract the latest prebuilt Piper TTS Engine (approx. 22MB) from GitHub directly into your bin/ folder.\n\nAre you sure you want to download and install the Piper Engine now?");
   if (!choice) return;
 
@@ -496,6 +511,12 @@ async function triggerPiperDownloadFlow() {
 }
 
 async function triggerWhisperDownloadFlow() {
+  const deps = await window.api.checkDependencies();
+  if (deps.whisperEngine) {
+    //alert("Whisper.cpp Engine is already downloaded and configured in your bin folder!");
+    return;
+  }
+
   const choice = confirm("This action will download and extract the prebuilt Whisper.cpp CPU Engine (approx. 8MB) from GitHub directly into your bin/ folder.\n\nAre you sure you want to download and install the Whisper.cpp Engine now?");
   if (!choice) return;
 
@@ -761,7 +782,7 @@ function setupEventListeners() {
   // Listen to download progress status events
   window.api.onFfmpegProgress((data) => {
     logStatus(`[FFmpeg Downloader] ${data.msg}`);
-    
+
     // Update progress overlay visuals dynamically
     downloadTitle.innerText = 'Downloading FFmpeg';
     downloadProgressBar.style.width = `${data.progress}%`;
@@ -825,7 +846,6 @@ function setupEventListeners() {
 
   titleBarInfo.addEventListener('click', () => {
     logStatus('About dialog opened from title bar.', 'system');
-    alert('SpeechBoleh - Local Offline STT & TTS Client\nVersion: Beta v0.5.0\nPowered by Whisper.cpp & Piper Engine');
   });
 }
 

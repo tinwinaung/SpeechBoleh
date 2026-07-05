@@ -16,15 +16,39 @@
 <body>
 
   <!-- Custom Title Bar -->
-  <div id="custom-title-bar" class="d-flex align-items-center justify-content-between bg-dark border-bottom border-secondary border-opacity-10 px-3 py-0 user-select-none" style="-webkit-app-region: drag; height: 32px; font-size: 0.75rem; color: #a3a3a3;">
+  <div id="custom-title-bar"
+    class="d-flex align-items-center justify-content-between bg-dark border-bottom border-secondary border-opacity-10 px-3 py-0 user-select-none"
+    style="-webkit-app-region: drag; height: 32px; font-size: 0.75rem; color: #a3a3a3;">
     <!-- Left: App Logo, Title, and Action/Functional Icons -->
     <div class="d-flex align-items-center gap-2">
       <i class="bi bi-soundwave text-cyan fs-6"></i>
       <span class="fw-semibold text-white-50">SpeechBoleh</span>
-      <span class="badge bg-secondary bg-opacity-25 text-secondary px-1.5 py-0.5 rounded-pill" style="font-size: 0.6rem;">Beta v0.5.0</span>
-      <div class="d-flex align-items-center gap-2 ms-3 border-start border-secondary border-opacity-20 ps-3" style="-webkit-app-region: no-drag;">
-        <button class="btn btn-link p-0 text-secondary border-0 hover-light" id="title-bar-settings" title="Settings" style="font-size: 0.8rem; line-height: 1;"><i class="bi bi-gear-fill"></i></button>
-        <button class="btn btn-link p-0 text-secondary border-0 hover-light" id="title-bar-info" title="About SpeechBoleh" style="font-size: 0.8rem; line-height: 1;"><i class="bi bi-info-circle-fill"></i></button>
+      <span class="badge bg-secondary bg-opacity-25 text-secondary px-1.5 py-0.5 rounded-pill"
+        style="font-size: 0.6rem;">Beta v0.5.0</span>
+      <div class="d-flex align-items-center gap-2 ms-3 border-start border-secondary border-opacity-20 ps-3"
+        style="-webkit-app-region: no-drag;">
+        <div class="dropdown d-flex align-items-center" style="line-height: 1;">
+          <button
+            class="btn btn-link p-0 text-secondary border-0 hover-light dropdown-toggle no-caret text-decoration-none"
+            type="button" id="titleBarDownloadDropdown" data-bs-toggle="dropdown" aria-expanded="false"
+            title="Download offline engine runtimes" style="font-size: 0.75rem; line-height: 1;">
+            Menu <i class="bi bi-chevron-down ms-1" style="font-size: 0.6rem; vertical-align: middle;"></i>
+          </button>
+          <ul class="dropdown-menu dropdown-menu-dark bg-dark border border-secondary border-opacity-20 shadow-lg mt-1"
+            aria-labelledby="titleBarDownloadDropdown" style="font-size: 0.75rem; border-radius: 8px;">
+            <li><a class="dropdown-item py-2" href="#" id="btn-download-ffmpeg-ui"><i
+                  class="bi bi-file-earmark-zip me-2 text-cyan"></i>Download FFmpeg</a></li>
+            <li><a class="dropdown-item py-2" href="#" id="btn-download-piper-ui"><i
+                  class="bi bi-soundwave me-2 text-purple"></i>Download Piper Engine</a></li>
+            <li><a class="dropdown-item py-2" href="#" id="btn-download-whisper-ui"><i
+                  class="bi bi-translate me-2 text-cyan"></i>Download Whisper Engine</a></li>
+          </ul>
+        </div>
+        <button class="btn btn-link p-0 text-secondary border-0 hover-light" id="title-bar-settings" title="Settings"
+          style="font-size: 0.8rem; line-height: 1;"><i class="bi bi-gear-fill"></i></button>
+        <button class="btn btn-link p-0 text-secondary border-0 hover-light" id="title-bar-info"
+          title="About SpeechBoleh" style="font-size: 0.8rem; line-height: 1;" data-bs-toggle="modal"
+          data-bs-target="#aboutModal"><i class="bi bi-info-circle-fill"></i></button>
       </div>
     </div>
 
@@ -43,7 +67,7 @@
   </div>
 
   <!-- Header Section -->
-  <header
+  <!--header
     class="py-3 px-4 border-bottom border-secondary border-opacity-10 d-flex justify-content-between align-items-center bg-dark bg-opacity-30">
     <div class="d-flex align-items-center">
       <div class="bg-gradient bg-cyan p-2 rounded-3 me-3 d-flex align-items-center justify-content-center"
@@ -61,25 +85,11 @@
       </div>
     </div>
     <div class="d-flex align-items-center gap-3">
-      <div class="dropdown">
-        <button class="btn btn-outline-cyan btn-sm py-1 px-3 rounded-pill font-monospace dropdown-toggle" 
-                type="button" id="downloadEnginesDropdown" data-bs-toggle="dropdown" aria-expanded="false" 
-                style="font-size: 0.7rem; border-color: rgba(6, 182, 212, 0.4); color: var(--accent-cyan);"
-                title="Download local runtime engines">
-          <i class="bi bi-download me-1"></i>Download Engines
-        </button>
-        <ul class="dropdown-menu dropdown-menu-end dropdown-menu-dark bg-dark border border-secondary border-opacity-20 shadow-lg" 
-            aria-labelledby="downloadEnginesDropdown" style="font-size: 0.75rem; border-radius: 8px;">
-          <li><a class="dropdown-item py-2" href="#" id="btn-download-ffmpeg-ui"><i class="bi bi-file-earmark-zip me-2 text-cyan"></i>Download FFmpeg</a></li>
-          <li><a class="dropdown-item py-2" href="#" id="btn-download-piper-ui"><i class="bi bi-soundwave me-2 text-purple"></i>Download Piper Engine</a></li>
-          <li><a class="dropdown-item py-2" href="#" id="btn-download-whisper-ui"><i class="bi bi-translate me-2 text-cyan"></i>Download Whisper Engine</a></li>
-        </ul>
-      </div>
       <span
         class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-10 fs-8 py-1.5 px-3 rounded-pill font-monospace"><i
           class="bi bi-shield-fill-check me-1"></i>Fully Offline</span>
     </div>
-  </header>
+  </header-->
 
   <!-- Main Container -->
   <main class="flex-grow-1 p-4 overflow-auto d-flex flex-column gap-4">
@@ -136,25 +146,6 @@
                 might take a few moments...</p>
             </div>
 
-            <!-- Model Download Progress Overlay -->
-            <div id="model-download-overlay" class="loading-overlay">
-              <div class="spinner-border text-cyan mb-3" role="status" style="width: 3rem; height: 3rem;"></div>
-              <h5 class="fw-semibold text-white mb-1" id="download-title">Downloading Whisper Model</h5>
-              <p class="small text-secondary text-center px-4 mb-3">Fetching weights directly from Hugging Face offline
-                cache...</p>
-              <div class="w-75 mx-auto">
-                <div class="progress bg-dark" style="height: 10px; border-radius: 5px; overflow: hidden;">
-                  <div id="download-progress-bar"
-                    class="progress-bar progress-bar-striped progress-bar-animated bg-cyan" role="progressbar"
-                    style="width: 0%"></div>
-                </div>
-                <div class="d-flex justify-content-between mt-2 px-1">
-                  <span class="small text-secondary font-monospace" id="download-bytes" style="font-size: 0.75rem;">0 /
-                    0 MB</span>
-                  <span class="small text-cyan font-monospace" id="download-pct" style="font-size: 0.75rem;">0%</span>
-                </div>
-              </div>
-            </div>
 
             <!-- TAB 1: System Microphone -->
             <div class="tab-pane fade show active h-100" id="mic-content" role="tabpanel" aria-labelledby="mic-tab">
@@ -486,6 +477,58 @@
     </div>
     <div class="small text-secondary font-monospace" style="font-size: 0.7rem;">v1.0.0 (Win64)</div>
   </footer>
+
+  <!-- About Modal -->
+  <div class="modal fade" id="aboutModal" tabindex="-1" aria-labelledby="aboutModalLabel" aria-hidden="true"
+    style="-webkit-app-region: no-drag;">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content bg-dark border border-secondary border-opacity-20 text-white shadow-lg"
+        style="border-radius: 12px;">
+        <div
+          class="modal-header border-bottom border-secondary border-opacity-10 py-2.5 px-3 d-flex align-items-center justify-content-between">
+          <h5 class="modal-title fs-6 fw-bold text-white-50" id="aboutModalLabel">About SpeechBoleh</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"
+            style="font-size: 0.75rem;"></button>
+        </div>
+        <div class="modal-body p-4 text-center">
+          <div
+            class="bg-gradient bg-cyan p-3 rounded-circle d-inline-flex align-items-center justify-content-center mb-3"
+            style="width: 64px; height: 64px; background: linear-gradient(135deg, #06b6d4, #8b5cf6);">
+            <i class="bi bi-soundwave text-white fs-2"></i>
+          </div>
+          <h4 class="h5 fw-bold text-white mb-1">SpeechBoleh</h4>
+          <p class="small text-secondary mb-3">Version Beta v0.5.0</p>
+          <hr class="border-secondary border-opacity-10 my-3">
+          <p class="small text-white-50 leading-relaxed mb-0">
+            SpeechBoleh is a premium local, fully offline Speech-to-Text (STT) and Text-to-Speech (TTS) desktop client
+            powered by **Whisper.cpp** and the **Piper Neural TTS** engine.
+          </p>
+        </div>
+        <div class="modal-footer border-top border-secondary border-opacity-10 py-2 px-3">
+          <button type="button" class="btn btn-secondary btn-sm py-1 px-3 rounded-pill" data-bs-dismiss="modal"
+            style="font-size: 0.75rem;">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Global Fullscreen Download Progress Overlay -->
+  <div id="model-download-overlay" class="loading-overlay">
+    <div class="spinner-border text-cyan mb-3" role="status" style="width: 3rem; height: 3rem;"></div>
+    <h5 class="fw-semibold text-white mb-1" id="download-title">Downloading Whisper Model</h5>
+    <p class="small text-secondary text-center px-4 mb-3">Fetching weights directly from Hugging Face offline cache...</p>
+    <div class="w-50 mx-auto" style="max-width: 500px;">
+      <div class="progress bg-dark" style="height: 10px; border-radius: 5px; overflow: hidden;">
+        <div id="download-progress-bar"
+          class="progress-bar progress-bar-striped progress-bar-animated bg-cyan" role="progressbar"
+          style="width: 0%"></div>
+      </div>
+      <div class="d-flex justify-content-between mt-2 px-1">
+        <span class="small text-secondary font-monospace" id="download-bytes" style="font-size: 0.75rem;">0 / 0 MB</span>
+        <span class="small text-cyan font-monospace" id="download-pct" style="font-size: 0.75rem;">0%</span>
+      </div>
+    </div>
+  </div>
 
   <!-- Bootstrap 5 JavaScript Bundle CDN -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>

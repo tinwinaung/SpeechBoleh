@@ -540,13 +540,27 @@ ipcMain.handle('read-clipboard', async () => {
 
 // IPC: Check core dependencies and runtime status
 ipcMain.handle('check-dependencies', async () => {
+  const localFfmpeg = getAssetPath('bin', 'ffmpeg', 'bin', 'ffmpeg.exe');
   const piperExe = getAssetPath('bin', 'piper', 'piper', 'piper.exe');
   const whisperCli = getAssetPath('bin', 'whisper', 'Release', 'whisper-cli.exe');
+  
+  const ffmpegVal = fs.existsSync(localFfmpeg);
+  const piperVal = fs.existsSync(piperExe);
+  const whisperVal = fs.existsSync(whisperCli);
+
+  console.log('[Dependencies Check Log]', {
+    ffmpeg: ffmpegVal,
+    ffmpegExePath: localFfmpeg,
+    piperEngine: piperVal,
+    piperExePath: piperExe,
+    whisperEngine: whisperVal,
+    whisperCliPath: whisperCli
+  });
 
   return {
-    ffmpeg: hasValidFfmpeg(),
-    piperEngine: fs.existsSync(piperExe),
-    whisperEngine: fs.existsSync(whisperCli)
+    ffmpeg: ffmpegVal,
+    piperEngine: piperVal,
+    whisperEngine: whisperVal
   };
 });
 
@@ -822,8 +836,9 @@ ipcMain.handle('download-ffmpeg', async (event) => {
   const ffmpegTargetDir = getAssetPath('bin', 'ffmpeg', 'bin');
   const ffmpegFinalPath = path.join(ffmpegTargetDir, 'ffmpeg.exe');
 
-  // URL for latest stable essentials build from gyan.dev
+  // URL for latest stable essentials build from gyan.dev, with a reliable fallback GitHub release mirror
   const ffmpegUrl = 'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip';
+  const ffmpegFallbackUrl = 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip';
 
   try {
     // 1. Ensure target directories exist
@@ -838,11 +853,21 @@ ipcMain.handle('download-ffmpeg', async (event) => {
     // Send initial status update
     sendStatus('Downloading latest FFmpeg essentials release (approx. 90MB)...', 0);
 
-    // 3. Download the zip file
-    await downloadUrlToFile(ffmpegUrl, ffmpegZipDest, (downloaded, total) => {
-      const percentage = total ? Math.round((downloaded / total) * 100) : 0;
-      sendStatus(`Downloading FFmpeg archive: ${percentage}%`, percentage);
-    });
+    // 3. Download the zip file with primary/fallback try-catch
+    try {
+      await downloadUrlToFile(ffmpegUrl, ffmpegZipDest, (downloaded, total) => {
+        const percentage = total ? Math.round((downloaded / total) * 100) : 0;
+        sendStatus(`Downloading FFmpeg archive: ${percentage}%`, percentage);
+      });
+    } catch (primaryErr) {
+      console.warn('[FFmpeg Downloader] Primary download link refused connection. Attempting backup mirror...', primaryErr);
+      sendStatus('Primary mirror connection refused. Accessing backup download mirror (approx. 100MB)...', 0);
+      
+      await downloadUrlToFile(ffmpegFallbackUrl, ffmpegZipDest, (downloaded, total) => {
+        const percentage = total ? Math.round((downloaded / total) * 100) : 0;
+        sendStatus(`Downloading FFmpeg (Backup Mirror): ${percentage}%`, percentage);
+      });
+    }
 
     // 4. Extract the zip file using PowerShell Expand-Archive (native to Windows)
     sendStatus('Extracting zip archive using PowerShell...', 100);

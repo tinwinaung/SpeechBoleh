@@ -397,3 +397,21 @@ body {
 .hover-light:hover {
   color: var(--accent-cyan) !important;
 }
+
+/* Hide bootstrap caret for title bar icon dropdowns */
+.no-caret::after {
+  display: none !important;
+}
+
+/* Make model download progress overlay cover the entire viewport */
+#model-download-overlay {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  z-index: 9999 !important;
+  border-radius: 0 !important;
+  background: rgba(10, 15, 30, 0.95) !important;
+  backdrop-filter: blur(8px) !important;
+}
