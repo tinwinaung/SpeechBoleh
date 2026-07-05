@@ -415,3 +415,43 @@ body {
   background: rgba(10, 15, 30, 0.95) !important;
   backdrop-filter: blur(8px) !important;
 }
+
+/* Premium Segmented Controls / Tabbed Panels */
+.segmented-control {
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 20px;
+  padding: 3px;
+  display: inline-flex;
+}
+
+.segmented-control .nav-item {
+  margin: 0;
+}
+
+.segmented-control .nav-link {
+  color: #94a3b8;
+  background: transparent !important;
+  border: none !important;
+  border-radius: 18px !important;
+  padding: 5px 16px !important;
+  font-size: 0.75rem !important;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  box-shadow: none !important;
+}
+
+.segmented-control .nav-link:hover {
+  color: #f1f5f9;
+}
+
+.segmented-control .nav-link.active {
+  color: #ffffff !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* Multi-level Dropdown Submenus */
+.dropdown-submenu:hover > .dropdown-menu {
+  display: block !important;
+}

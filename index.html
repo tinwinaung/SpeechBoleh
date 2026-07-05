@@ -36,12 +36,22 @@
           </button>
           <ul class="dropdown-menu dropdown-menu-dark bg-dark border border-secondary border-opacity-20 shadow-lg mt-1"
             aria-labelledby="titleBarDownloadDropdown" style="font-size: 0.75rem; border-radius: 8px;">
-            <li><a class="dropdown-item py-2" href="#" id="btn-download-ffmpeg-ui"><i
-                  class="bi bi-file-earmark-zip me-2 text-cyan"></i>Download FFmpeg</a></li>
-            <li><a class="dropdown-item py-2" href="#" id="btn-download-piper-ui"><i
-                  class="bi bi-soundwave me-2 text-purple"></i>Download Piper Engine</a></li>
-            <li><a class="dropdown-item py-2" href="#" id="btn-download-whisper-ui"><i
-                  class="bi bi-translate me-2 text-cyan"></i>Download Whisper Engine</a></li>
+            <li class="dropdown-submenu position-relative">
+              <a class="dropdown-item py-2 d-flex justify-content-between align-items-center" href="#">
+                <span><i class="bi bi-cloud-arrow-down-fill me-2 text-cyan"></i>Download Engines</span>
+                <i class="bi bi-chevron-right ms-2" style="font-size: 0.6rem;"></i>
+              </a>
+              <ul
+                class="dropdown-menu dropdown-menu-dark bg-dark border border-secondary border-opacity-20 shadow-lg mt-0"
+                style="font-size: 0.75rem; border-radius: 8px; position: absolute; top: 0; left: 100%; display: none;">
+                <li><a class="dropdown-item py-2" href="#" id="btn-download-ffmpeg-ui"><i
+                      class="bi bi-file-earmark-zip me-2 text-cyan"></i>FFmpeg</a></li>
+                <li><a class="dropdown-item py-2" href="#" id="btn-download-piper-ui"><i
+                      class="bi bi-soundwave me-2 text-purple"></i>Piper</a></li>
+                <li><a class="dropdown-item py-2" href="#" id="btn-download-whisper-ui"><i
+                      class="bi bi-translate me-2 text-cyan"></i>Whisper</a></li>
+              </ul>
+            </li>
           </ul>
         </div>
         <button class="btn btn-link p-0 text-secondary border-0 hover-light" id="title-bar-settings" title="Settings"
@@ -93,10 +103,29 @@
 
   <!-- Main Container -->
   <main class="flex-grow-1 p-4 overflow-auto d-flex flex-column gap-4">
-    <div class="row g-4 flex-shrink-0">
+    <!-- Segmented Tab Panel Navigation (Space-Saving) -->
+    <div class="d-flex mb-1 flex-shrink-0" style="-webkit-app-region: no-drag;">
+      <ul class="nav nav-pills segmented-control" id="mainTab" role="tablist">
+        <li class="nav-item" role="presentation">
+          <button class="nav-link active fw-semibold d-flex align-items-center gap-2" id="stt-tab" data-bs-toggle="tab"
+            data-bs-target="#stt-pane" type="button" role="tab" aria-controls="stt-pane" aria-selected="true">
+            <i class="bi bi-mic-fill text-cyan"></i> Speech-to-Text
+          </button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button class="nav-link fw-semibold d-flex align-items-center gap-2" id="tts-tab" data-bs-toggle="tab"
+            data-bs-target="#tts-pane" type="button" role="tab" aria-controls="tts-pane" aria-selected="false">
+            <i class="bi bi-megaphone-fill text-purple"></i> Speech Synthesis
+          </button>
+        </li>
+      </ul>
+    </div>
 
-      <!-- LEFT COLUMN: Speech-to-Text (STT) -->
-      <div class="col-lg-6">
+    <!-- Tabs Content -->
+    <div class="tab-content flex-shrink-0" id="mainTabContent">
+
+      <!-- Speech-to-Text (STT) Tab Pane -->
+      <div class="tab-pane fade show active" id="stt-pane" role="tabpanel" aria-labelledby="stt-tab">
         <div class="glass-container p-4">
           <div class="d-flex justify-content-between align-items-center mb-3">
             <h2 class="h5 m-0 fw-semibold d-flex align-items-center">
@@ -260,8 +289,8 @@
         </div>
       </div>
 
-      <!-- RIGHT COLUMN: Text-to-Speech (TTS) -->
-      <div class="col-lg-6">
+      <!-- Speech Synthesis (TTS) Tab Pane -->
+      <div class="tab-pane fade" id="tts-pane" role="tabpanel" aria-labelledby="tts-tab">
         <div class="glass-container p-4">
           <div class="d-flex justify-content-between align-items-center mb-3">
             <h2 class="h5 m-0 fw-semibold d-flex align-items-center">
@@ -516,15 +545,16 @@
   <div id="model-download-overlay" class="loading-overlay">
     <div class="spinner-border text-cyan mb-3" role="status" style="width: 3rem; height: 3rem;"></div>
     <h5 class="fw-semibold text-white mb-1" id="download-title">Downloading Whisper Model</h5>
-    <p class="small text-secondary text-center px-4 mb-3">Fetching weights directly from Hugging Face offline cache...</p>
+    <p class="small text-secondary text-center px-4 mb-3">Fetching weights directly from Hugging Face offline cache...
+    </p>
     <div class="w-50 mx-auto" style="max-width: 500px;">
       <div class="progress bg-dark" style="height: 10px; border-radius: 5px; overflow: hidden;">
-        <div id="download-progress-bar"
-          class="progress-bar progress-bar-striped progress-bar-animated bg-cyan" role="progressbar"
-          style="width: 0%"></div>
+        <div id="download-progress-bar" class="progress-bar progress-bar-striped progress-bar-animated bg-cyan"
+          role="progressbar" style="width: 0%"></div>
       </div>
       <div class="d-flex justify-content-between mt-2 px-1">
-        <span class="small text-secondary font-monospace" id="download-bytes" style="font-size: 0.75rem;">0 / 0 MB</span>
+        <span class="small text-secondary font-monospace" id="download-bytes" style="font-size: 0.75rem;">0 / 0
+          MB</span>
         <span class="small text-cyan font-monospace" id="download-pct" style="font-size: 0.75rem;">0%</span>
       </div>
     </div>
