@@ -54,7 +54,7 @@ Before you begin, ensure you have the following installed:
 
 2. **Install dependencies**:
    This is required before you run `npm start` or `npm run dist`.
-   
+
    ```bash
    npm install
    ```
@@ -93,7 +93,7 @@ npm run dist
 
 ### 3. Speech-to-Text Pipeline (STT)
 * **Whisper.cpp**: Standalone high-performance C++ transcription binary running GGUF-compatible weights.
-* **Local FFmpeg**: Embedded inside `bin/ffmpeg/bin/ffmpeg.exe`, handling input resampling and converting diverse uploads into standard 16-bit mono PCM wav files required by Whisper.cpp.
+* **Local [FFmpeg](https://www.gyan.dev/ffmpeg/builds/)**: Embedded inside `bin/ffmpeg/bin/ffmpeg.exe`, handling input resampling and converting diverse uploads into standard 16-bit mono PCM wav files required by Whisper.cpp.
 * **Gyan.dev Model Downloader**: A redirect-aware HTTPS downloader that fetches model weights (`ggml-tiny.bin` and `ggml-base.bin`) directly from Hugging Face repositories, handling 307/308 relative location redirections dynamically.
 
 ### 4. Text-to-Speech Pipeline (TTS)
@@ -101,6 +101,8 @@ npm run dist
 * **ONNX Runtime (Embedded)**: Loaded via Piper to process ONNX-based voice models (`en_US-lessac-medium.onnx`, `en_US-joe-medium.onnx`, `en_US-ryan-medium.onnx`).
 * **Hugging Face Downloader**: Downloads voice models (`.onnx` and `.json` configs) dynamically to your offline cache directory.
 
+### Resources
+Please read external resources [here](bin/readme.md)
 ---
 
 ## 📁 Project Architecture & Components

@@ -33,7 +33,21 @@
         <p class="small text-secondary m-0" style="font-size: 0.75rem;">Powered by Whisper.cpp & Piper Engine</p>
       </div>
     </div>
-    <div class="d-flex align-items-center">
+    <div class="d-flex align-items-center gap-3">
+      <div class="dropdown">
+        <button class="btn btn-outline-cyan btn-sm py-1 px-3 rounded-pill font-monospace dropdown-toggle" 
+                type="button" id="downloadEnginesDropdown" data-bs-toggle="dropdown" aria-expanded="false" 
+                style="font-size: 0.7rem; border-color: rgba(6, 182, 212, 0.4); color: var(--accent-cyan);"
+                title="Download local runtime engines">
+          <i class="bi bi-download me-1"></i>Download Engines
+        </button>
+        <ul class="dropdown-menu dropdown-menu-end dropdown-menu-dark bg-dark border border-secondary border-opacity-20 shadow-lg" 
+            aria-labelledby="downloadEnginesDropdown" style="font-size: 0.75rem; border-radius: 8px;">
+          <li><a class="dropdown-item py-2" href="#" id="btn-download-ffmpeg-ui"><i class="bi bi-file-earmark-zip me-2 text-cyan"></i>Download FFmpeg</a></li>
+          <li><a class="dropdown-item py-2" href="#" id="btn-download-piper-ui"><i class="bi bi-soundwave me-2 text-purple"></i>Download Piper Engine</a></li>
+          <li><a class="dropdown-item py-2" href="#" id="btn-download-whisper-ui"><i class="bi bi-translate me-2 text-cyan"></i>Download Whisper Engine</a></li>
+        </ul>
+      </div>
       <span
         class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-10 fs-8 py-1.5 px-3 rounded-pill font-monospace"><i
           class="bi bi-shield-fill-check me-1"></i>Fully Offline</span>

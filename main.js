@@ -1,7 +1,8 @@
-const { app, BrowserWindow, ipcMain, session, protocol, net, clipboard } = require('electron');
+const { app, BrowserWindow, ipcMain, session, protocol, net, clipboard, Menu, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const https = require('https');
+const http = require('http');
 const { exec, execFile, execSync, spawn } = require('child_process');
 const { pathToFileURL } = require('url');
 const ffmpeg = require('fluent-ffmpeg');
@@ -117,6 +118,7 @@ function createWindow() {
     autoHideMenuBar: true
   });
 
+  mainWindow.setMenu(null);
   mainWindow.loadFile('index.html');
 
   mainWindow.on('closed', () => {
@@ -256,7 +258,9 @@ app.whenReady().then(() => {
   createWindow();
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createWindow();
+    }
   });
 });
 
@@ -532,9 +536,21 @@ ipcMain.handle('download-model', async (event, modelName) => {
     const file = fs.createWriteStream(tempDestPath);
 
     function startDownload(downloadUrl) {
-      const request = https.get(downloadUrl, (response) => {
-        // Handle redirects (Hugging Face redirects download links with 301, 302, 307, or 308)
-        if ([301, 302, 307, 308].includes(response.statusCode)) {
+      const client = downloadUrl.startsWith('https') ? https : http;
+      const parsedUrl = new URL(downloadUrl);
+      const options = {
+        protocol: parsedUrl.protocol,
+        hostname: parsedUrl.hostname,
+        port: parsedUrl.port,
+        path: parsedUrl.pathname + parsedUrl.search,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
+      };
+
+      const request = client.get(options, (response) => {
+        // Handle redirects (Hugging Face redirects download links with 301, 302, 303, 307, or 308)
+        if ([301, 302, 303, 307, 308].includes(response.statusCode)) {
           const redirectUrl = new URL(response.headers.location, downloadUrl).toString();
           console.log(`[Model Downloader] Following redirect to: ${redirectUrl}`);
           startDownload(redirectUrl);
@@ -568,6 +584,7 @@ ipcMain.handle('download-model', async (event, modelName) => {
         file.on('finish', () => {
           file.close();
           try {
+            if (fs.existsSync(destPath)) fs.unlinkSync(destPath);
             fs.renameSync(tempDestPath, destPath);
             console.log(`[Model Downloader] Successfully downloaded and saved model to: ${destPath}`);
             resolve({ success: true });
@@ -590,15 +607,29 @@ ipcMain.handle('download-model', async (event, modelName) => {
   });
 });
 
-// Helper to download files (with redirect support and progress)
+// Helper to download files (with redirect support, user agent, protocol-agnostic, and progress)
 function downloadUrlToFile(downloadUrl, destPath, onProgress) {
   return new Promise((resolve, reject) => {
     const tempDestPath = destPath + '.tmp';
-    const file = fs.createWriteStream(tempDestPath);
+    let file = fs.createWriteStream(tempDestPath);
+    let requestObj = null;
 
     function startDownload(url) {
-      const request = https.get(url, (response) => {
-        if ([301, 302, 307, 308].includes(response.statusCode)) {
+      const client = url.startsWith('https') ? https : http;
+      const parsedUrl = new URL(url);
+      
+      const options = {
+        protocol: parsedUrl.protocol,
+        hostname: parsedUrl.hostname,
+        port: parsedUrl.port,
+        path: parsedUrl.pathname + parsedUrl.search,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
+      };
+
+      requestObj = client.get(options, (response) => {
+        if ([301, 302, 303, 307, 308].includes(response.statusCode)) {
           const redirectUrl = new URL(response.headers.location, url).toString();
           startDownload(redirectUrl);
           return;
@@ -624,6 +655,7 @@ function downloadUrlToFile(downloadUrl, destPath, onProgress) {
         file.on('finish', () => {
           file.close();
           try {
+            if (fs.existsSync(destPath)) fs.unlinkSync(destPath);
             fs.renameSync(tempDestPath, destPath);
             resolve();
           } catch (err) {
@@ -632,7 +664,7 @@ function downloadUrlToFile(downloadUrl, destPath, onProgress) {
         });
       });
 
-      request.on('error', (err) => {
+      requestObj.on('error', (err) => {
         file.close();
         if (fs.existsSync(tempDestPath)) fs.unlinkSync(tempDestPath);
         reject(err);
@@ -689,3 +721,276 @@ ipcMain.handle('download-voice-model', async (event, voiceName) => {
     return { success: false, error: err.message };
   }
 });
+
+// IPC: Download latest FFmpeg build from gyan.dev
+ipcMain.handle('download-ffmpeg', async (event) => {
+  const ffmpegZipDest = path.join(tmpDir, 'ffmpeg.zip');
+  const extractTempDir = path.join(tmpDir, 'ffmpeg_extracted');
+  const ffmpegTargetDir = getAssetPath('bin', 'ffmpeg', 'bin');
+  const ffmpegFinalPath = path.join(ffmpegTargetDir, 'ffmpeg.exe');
+
+  // URL for latest stable essentials build from gyan.dev
+  const ffmpegUrl = 'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip';
+
+  try {
+    // 1. Ensure target directories exist
+    if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+    if (!fs.existsSync(ffmpegTargetDir)) fs.mkdirSync(ffmpegTargetDir, { recursive: true });
+
+    // 2. Clean up any previous extraction directories
+    if (fs.existsSync(extractTempDir)) {
+      fs.rmSync(extractTempDir, { recursive: true, force: true });
+    }
+
+    // Send initial status update
+    sendStatus('Downloading latest FFmpeg essentials release (approx. 90MB)...', 0);
+
+    // 3. Download the zip file
+    await downloadUrlToFile(ffmpegUrl, ffmpegZipDest, (downloaded, total) => {
+      const percentage = total ? Math.round((downloaded / total) * 100) : 0;
+      sendStatus(`Downloading FFmpeg archive: ${percentage}%`, percentage);
+    });
+
+    // 4. Extract the zip file using PowerShell Expand-Archive (native to Windows)
+    sendStatus('Extracting zip archive using PowerShell...', 100);
+    const extractCmd = `powershell -Command "Expand-Archive -Path '${ffmpegZipDest}' -DestinationPath '${extractTempDir}' -Force"`;
+    
+    await new Promise((resolve, reject) => {
+      exec(extractCmd, (err, stdout, stderr) => {
+        if (err) {
+          console.error('[FFmpeg Extraction Error]', err, stderr);
+          reject(new Error(`Extraction failed: ${stderr || err.message}`));
+        } else {
+          resolve();
+        }
+      });
+    });
+
+    // 5. Find ffmpeg.exe inside the extracted folder recursively
+    sendStatus('Searching for ffmpeg.exe in extracted folder...', 100);
+    const foundExePath = findFileRecursively(extractTempDir, 'ffmpeg.exe');
+    if (!foundExePath) {
+      throw new Error('Could not locate ffmpeg.exe inside the extracted archive.');
+    }
+
+    // 6. Copy ffmpeg.exe to final destination
+    sendStatus('Deploying executable to bin/ffmpeg/bin/...', 100);
+    fs.copyFileSync(foundExePath, ffmpegFinalPath);
+
+    // 7. Verify file exists
+    if (fs.existsSync(ffmpegFinalPath)) {
+      sendStatus('Cleaning up temporary setup files...', 100);
+      try {
+        if (fs.existsSync(ffmpegZipDest)) fs.unlinkSync(ffmpegZipDest);
+        if (fs.existsSync(extractTempDir)) fs.rmSync(extractTempDir, { recursive: true, force: true });
+      } catch (cleanupErr) {
+        console.warn('[FFmpeg Setup Cleanup Warning]', cleanupErr);
+      }
+      return { success: true, path: ffmpegFinalPath };
+    } else {
+      throw new Error('Failed to copy ffmpeg.exe to destination.');
+    }
+
+  } catch (error) {
+    console.error('[FFmpeg Download/Setup Error]', error);
+    return { success: false, error: error.message };
+  }
+
+  function sendStatus(msg, progress = 0) {
+    if (mainWindow) {
+      mainWindow.webContents.send('ffmpeg-download-progress', { msg, progress });
+    }
+  }
+});
+
+// Helper: Recursively find a file by name
+function findFileRecursively(dir, fileName) {
+  const files = fs.readdirSync(dir);
+  for (const file of files) {
+    const fullPath = path.join(dir, file);
+    const stat = fs.statSync(fullPath);
+    if (stat.isDirectory()) {
+      const found = findFileRecursively(fullPath, fileName);
+      if (found) return found;
+    } else if (file.toLowerCase() === fileName.toLowerCase()) {
+      return fullPath;
+    }
+  }
+  return null;
+}
+
+// IPC: Download Piper Engine (C++ build)
+ipcMain.handle('download-piper', async (event) => {
+  const piperZipDest = path.join(tmpDir, 'piper.zip');
+  const piperTargetDir = getAssetPath('bin', 'piper');
+  const piperFinalExe = path.join(piperTargetDir, 'piper', 'piper.exe');
+  const url = 'https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_windows_amd64.zip';
+
+  try {
+    if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+    if (!fs.existsSync(piperTargetDir)) fs.mkdirSync(piperTargetDir, { recursive: true });
+
+    sendStatus('Downloading Piper Neural TTS Engine (approx. 22MB)...', 0);
+    await downloadUrlToFile(url, piperZipDest, (downloaded, total) => {
+      const percentage = total ? Math.round((downloaded / total) * 100) : 0;
+      sendStatus(`Downloading Piper: ${percentage}%`, percentage);
+    });
+
+    sendStatus('Extracting Piper engine archive...', 100);
+    const extractCmd = `powershell -Command "Expand-Archive -Path '${piperZipDest}' -DestinationPath '${piperTargetDir}' -Force"`;
+    await new Promise((resolve, reject) => {
+      exec(extractCmd, (err, stdout, stderr) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+
+    if (fs.existsSync(piperFinalExe)) {
+      sendStatus('Cleaning up temp files...', 100);
+      if (fs.existsSync(piperZipDest)) fs.unlinkSync(piperZipDest);
+      return { success: true, path: piperFinalExe };
+    } else {
+      throw new Error('Failed to configure piper.exe at destination.');
+    }
+  } catch (error) {
+    console.error('[Piper Engine Download Error]', error);
+    return { success: false, error: error.message };
+  }
+
+  function sendStatus(msg, progress = 0) {
+    if (mainWindow) {
+      mainWindow.webContents.send('piper-download-progress', { msg, progress });
+    }
+  }
+});
+
+// IPC: Download Whisper.cpp Engine (C++ build)
+ipcMain.handle('download-whisper-engine', async (event) => {
+  const whisperZipDest = path.join(tmpDir, 'whisper.zip');
+  const whisperTargetDir = getAssetPath('bin', 'whisper', 'Release');
+  const whisperFinalExe = path.join(whisperTargetDir, 'whisper-cli.exe');
+  const url = 'https://github.com/ggml-org/whisper.cpp/releases/download/v1.9.1/whisper-bin-x64.zip';
+
+  try {
+    if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+    if (!fs.existsSync(whisperTargetDir)) fs.mkdirSync(whisperTargetDir, { recursive: true });
+
+    sendStatus('Downloading Whisper.cpp Engine (approx. 8MB)...', 0);
+    await downloadUrlToFile(url, whisperZipDest, (downloaded, total) => {
+      const percentage = total ? Math.round((downloaded / total) * 100) : 0;
+      sendStatus(`Downloading Whisper: ${percentage}%`, percentage);
+    });
+
+    sendStatus('Extracting Whisper engine archive...', 100);
+    const extractCmd = `powershell -Command "Expand-Archive -Path '${whisperZipDest}' -DestinationPath '${whisperTargetDir}' -Force"`;
+    await new Promise((resolve, reject) => {
+      exec(extractCmd, (err, stdout, stderr) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+
+    // Handle zip nesting: if archive extracted a nested 'Release' folder, move files up
+    const nestedReleaseDir = path.join(whisperTargetDir, 'Release');
+    if (fs.existsSync(nestedReleaseDir) && fs.statSync(nestedReleaseDir).isDirectory()) {
+      const files = fs.readdirSync(nestedReleaseDir);
+      for (const file of files) {
+        const srcPath = path.join(nestedReleaseDir, file);
+        const destPathFile = path.join(whisperTargetDir, file);
+        if (fs.existsSync(destPathFile)) {
+          const stat = fs.statSync(destPathFile);
+          if (stat.isDirectory()) {
+            fs.rmSync(destPathFile, { recursive: true, force: true });
+          } else {
+            fs.unlinkSync(destPathFile);
+          }
+        }
+        fs.renameSync(srcPath, destPathFile);
+      }
+      try {
+        fs.rmdirSync(nestedReleaseDir);
+      } catch (rmDirErr) {
+        console.warn('[Whisper Cleanup Warning] Failed to delete nested Release directory:', rmDirErr);
+      }
+    }
+
+    // Handle binary naming options:
+    // In newer releases (v1.9.0+), whisper-cli.exe is precompiled inside the zip, and main.exe is just a deprecation warning.
+    // We only rename main.exe to whisper-cli.exe if whisper-cli.exe does not exist.
+    const mainExePath = path.join(whisperTargetDir, 'main.exe');
+    if (fs.existsSync(mainExePath)) {
+      if (!fs.existsSync(whisperFinalExe)) {
+        fs.renameSync(mainExePath, whisperFinalExe);
+      } else {
+        // Delete main.exe warning wrapper as we don't need it
+        try {
+          fs.unlinkSync(mainExePath);
+        } catch (e) {}
+      }
+    }
+
+    if (fs.existsSync(whisperFinalExe)) {
+      sendStatus('Cleaning up temp files...', 100);
+      if (fs.existsSync(whisperZipDest)) fs.unlinkSync(whisperZipDest);
+      return { success: true, path: whisperFinalExe };
+    } else {
+      throw new Error('Failed to configure whisper-cli.exe at destination.');
+    }
+  } catch (error) {
+    console.error('[Whisper Engine Download Error]', error);
+    return { success: false, error: error.message };
+  }
+
+  function sendStatus(msg, progress = 0) {
+    if (mainWindow) {
+      mainWindow.webContents.send('whisper-download-progress', { msg, progress });
+    }
+  }
+});
+
+// Menu Setup: App menu bar
+function setupAppMenu() {
+  const template = [
+    {
+      label: 'File',
+      submenu: [
+        { role: 'quit' }
+      ]
+    },
+    {
+      label: 'Tools',
+      submenu: [
+        {
+          label: 'Download latest FFmpeg',
+          click: () => {
+            if (mainWindow) {
+              mainWindow.webContents.send('trigger-ffmpeg-download');
+            }
+          }
+        },
+        {
+          label: 'Download Piper Engine',
+          click: () => {
+            if (mainWindow) {
+              mainWindow.webContents.send('trigger-piper-download');
+            }
+          }
+        },
+        {
+          label: 'Download Whisper.cpp Engine',
+          click: () => {
+            if (mainWindow) {
+              mainWindow.webContents.send('trigger-whisper-download');
+            }
+          }
+        },
+        { type: 'separator' },
+        { role: 'reload' },
+        { role: 'forceReload' },
+        { role: 'toggleDevTools' }
+      ]
+    }
+  ];
+  const menu = Menu.buildFromTemplate(template);
+  Menu.setApplicationMenu(menu);
+}

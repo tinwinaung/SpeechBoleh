@@ -142,6 +142,8 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
 
+scratch/
+tmp/
 dist/
 bin/*
 SpeechBoleh.zip

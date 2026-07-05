@@ -100,5 +100,59 @@ contextBridge.exposeInMainWorld('api', {
    * Read text from system clipboard using native Electron shell module
    * @returns {Promise<{success: boolean, text?: string, error?: string}>}
    */
-  readClipboard: () => ipcRenderer.invoke('read-clipboard')
+  readClipboard: () => ipcRenderer.invoke('read-clipboard'),
+
+  /**
+   * Trigger FFmpeg download from backend
+   * @returns {Promise<{success: boolean, path?: string, error?: string}>}
+   */
+  downloadFfmpeg: () => ipcRenderer.invoke('download-ffmpeg'),
+
+  /**
+   * Event listener for FFmpeg download progress
+   * @param {function} callback
+   */
+  onFfmpegProgress: (callback) => ipcRenderer.on('ffmpeg-download-progress', (event, data) => callback(data)),
+
+  /**
+   * Event listener for Menu bar download triggers
+   * @param {function} callback
+   */
+  onTriggerFfmpegDownload: (callback) => ipcRenderer.on('trigger-ffmpeg-download', (event) => callback()),
+
+  /**
+   * Trigger Piper engine download from backend
+   * @returns {Promise<{success: boolean, path?: string, error?: string}>}
+   */
+  downloadPiper: () => ipcRenderer.invoke('download-piper'),
+
+  /**
+   * Event listener for Piper download progress
+   * @param {function} callback
+   */
+  onPiperProgress: (callback) => ipcRenderer.on('piper-download-progress', (event, data) => callback(data)),
+
+  /**
+   * Event listener for Menu bar Piper download triggers
+   * @param {function} callback
+   */
+  onTriggerPiperDownload: (callback) => ipcRenderer.on('trigger-piper-download', (event) => callback()),
+
+  /**
+   * Trigger Whisper engine download from backend
+   * @returns {Promise<{success: boolean, path?: string, error?: string}>}
+   */
+  downloadWhisperEngine: () => ipcRenderer.invoke('download-whisper-engine'),
+
+  /**
+   * Event listener for Whisper download progress
+   * @param {function} callback
+   */
+  onWhisperProgress: (callback) => ipcRenderer.on('whisper-download-progress', (event, data) => callback(data)),
+
+  /**
+   * Event listener for Menu bar Whisper download triggers
+   * @param {function} callback
+   */
+  onTriggerWhisperDownload: (callback) => ipcRenderer.on('trigger-whisper-download', (event) => callback())
 });
