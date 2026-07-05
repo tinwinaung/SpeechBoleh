@@ -46,7 +46,7 @@
         "nsis",
         "portable"
       ],
-      "icon": "assets/ico512.png"
+      "icon": "assets/soundwave_512.png"
     },
     "nsis": {
       "oneClick": false,
