@@ -85,6 +85,26 @@ function configureFfmpeg() {
 
 configureFfmpeg();
 
+function hasValidFfmpeg() {
+  const localBinPath = getAssetPath('bin', 'ffmpeg', 'bin', 'ffmpeg.exe');
+  if (fs.existsSync(localBinPath)) return true;
+
+  try {
+    const whereOutput = execSync('where ffmpeg', { encoding: 'utf8' }).trim();
+    const firstPath = whereOutput.split('\r\n')[0];
+    if (firstPath && fs.existsSync(firstPath)) return true;
+  } catch (e) {}
+
+  const possiblePaths = [
+    path.join(process.env.USERPROFILE || 'C:\\Users\\TINWINAUNG', 'AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-8.1.2-full_build\\bin\\ffmpeg.exe'),
+    'C:\\ffmpeg\\bin\\ffmpeg.exe'
+  ];
+  for (const p of possiblePaths) {
+    if (fs.existsSync(p)) return true;
+  }
+  return false;
+}
+
 // ----------------------------------------------------
 // Clean up all temporary files in tmp folder
 // ----------------------------------------------------
@@ -158,7 +178,7 @@ ipcMain.on('window-close', () => {
 // Microsoft Visual C++ Redistributable Checker
 // ----------------------------------------------------
 function checkAndInstallMsvc() {
-  if (process.platform !== 'win32') return;
+  if (process.platform !== 'win32') return Promise.resolve();
 
   const { dialog } = require('electron');
   let isInstalled = false;
@@ -173,7 +193,7 @@ function checkAndInstallMsvc() {
 
   if (isInstalled) {
     console.log('[System] Microsoft Visual C++ Redistributable runtime check passed.');
-    return;
+    return Promise.resolve();
   }
 
   const redistLocalPath = getAssetPath('bin', 'vc_redist.x64.exe');
@@ -197,8 +217,9 @@ function checkAndInstallMsvc() {
     });
 
     if (choice === 0) {
-      launchInstaller(finalRedistPath);
+      return launchInstaller(finalRedistPath);
     }
+    return Promise.resolve();
   } else {
     // Both installer files are missing. Offer to download.
     const choice = dialog.showMessageBoxSync({
@@ -214,7 +235,7 @@ function checkAndInstallMsvc() {
       console.log('[System] Downloading VC++ Redistributable installer...');
       const downloadUrl = 'https://aka.ms/vs/17/release/vc_redist.x64.exe';
       
-      downloadUrlToFile(downloadUrl, redistTempPath)
+      return downloadUrlToFile(downloadUrl, redistTempPath)
         .then(() => {
           console.log('[System] VC++ Redistributable download complete.');
           const installChoice = dialog.showMessageBoxSync({
@@ -225,8 +246,9 @@ function checkAndInstallMsvc() {
             message: 'The Microsoft Visual C++ Redistributable installer was downloaded successfully. Would you like to run it now?'
           });
           if (installChoice === 0) {
-            launchInstaller(redistTempPath);
+            return launchInstaller(redistTempPath);
           }
+          return Promise.resolve();
         })
         .catch((err) => {
           console.error('[System] Failed to download VC++ Redistributable:', err);
@@ -234,55 +256,59 @@ function checkAndInstallMsvc() {
             'Download Failed',
             `Failed to download the VC++ Redistributable installer:\n${err.message}\n\nPlease install it manually from: https://aka.ms/vs/17/release/vc_redist.x64.exe`
           );
+          return Promise.resolve();
         });
     }
+    return Promise.resolve();
   }
 }
 
 function launchInstaller(exePath) {
-  console.log(`[System] Launching VC++ Redistributable installer: ${exePath}`);
-  try {
-    // Minimize the application main window
-    if (mainWindow) {
-      mainWindow.minimize();
-    }
+  return new Promise((resolve) => {
+    console.log(`[System] Launching VC++ Redistributable installer: ${exePath}`);
+    try {
+      // Minimize the application main window
+      if (mainWindow) {
+        mainWindow.minimize();
+      }
 
-    const child = spawn(exePath, [], {
-      stdio: 'ignore'
-    });
+      const child = spawn(exePath, [], {
+        stdio: 'ignore'
+      });
 
-    child.on('close', (code) => {
-      console.log(`[System] VC++ Redistributable installer process closed with code ${code}`);
-      // Restore and focus the application window when setup completes
+      child.on('close', (code) => {
+        console.log(`[System] VC++ Redistributable installer process closed with code ${code}`);
+        // Restore and focus the application window when setup completes
+        if (mainWindow) {
+          mainWindow.restore();
+          mainWindow.focus();
+        }
+        resolve();
+      });
+
+      child.on('error', (err) => {
+        console.error('[System] VC++ Redistributable installer process error:', err);
+        if (mainWindow) {
+          mainWindow.restore();
+          mainWindow.focus();
+        }
+        resolve();
+      });
+    } catch (spawnErr) {
+      console.error('[System] Failed to launch redistributable installer:', spawnErr);
       if (mainWindow) {
         mainWindow.restore();
         mainWindow.focus();
       }
-    });
-
-    child.on('error', (err) => {
-      console.error('[System] VC++ Redistributable installer process error:', err);
-      if (mainWindow) {
-        mainWindow.restore();
-        mainWindow.focus();
-      }
-    });
-  } catch (spawnErr) {
-    console.error('[System] Failed to launch redistributable installer:', spawnErr);
-    if (mainWindow) {
-      mainWindow.restore();
-      mainWindow.focus();
+      resolve();
     }
-  }
+  });
 }
 
 // ----------------------------------------------------
 // Auto-Granting Media Permissions inside Electron
 // ----------------------------------------------------
-app.whenReady().then(() => {
-  // Check and prompt for MSVC Redistributable on Windows
-  checkAndInstallMsvc();
-
+app.whenReady().then(async () => {
   // Set up safe local media streaming protocol
   protocol.handle('media', (request) => {
     const rawUrl = request.url;
@@ -306,6 +332,9 @@ app.whenReady().then(() => {
       callback(false);
     }
   });
+
+  // Check and prompt for MSVC Redistributable on Windows before opening window
+  await checkAndInstallMsvc();
 
   createWindow();
 
@@ -507,6 +536,18 @@ ipcMain.handle('read-clipboard', async () => {
     console.error('[IPC read-clipboard Error]', err);
     return { success: false, error: err.message };
   }
+});
+
+// IPC: Check core dependencies and runtime status
+ipcMain.handle('check-dependencies', async () => {
+  const piperExe = getAssetPath('bin', 'piper', 'piper', 'piper.exe');
+  const whisperCli = getAssetPath('bin', 'whisper', 'Release', 'whisper-cli.exe');
+
+  return {
+    ffmpeg: hasValidFfmpeg(),
+    piperEngine: fs.existsSync(piperExe),
+    whisperEngine: fs.existsSync(whisperCli)
+  };
 });
 
 // IPC: Read Uploaded Text File content
@@ -838,6 +879,8 @@ ipcMain.handle('download-ffmpeg', async (event) => {
       } catch (cleanupErr) {
         console.warn('[FFmpeg Setup Cleanup Warning]', cleanupErr);
       }
+      // Re-configure FFmpeg path globally for fluent-ffmpeg now that it exists locally
+      configureFfmpeg();
       return { success: true, path: ffmpegFinalPath };
     } else {
       throw new Error('Failed to copy ffmpeg.exe to destination.');

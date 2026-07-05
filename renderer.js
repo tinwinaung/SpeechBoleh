@@ -107,8 +107,180 @@ window.addEventListener('DOMContentLoaded', async () => {
   logStatus('Syncing offline Whisper model weights...', 'info');
   await syncModels();
   setupEventListeners();
+
+  // Run first-run setup checks
+  await checkAndSetupFirstRun();
+
   logStatus('System ready. All offline pipelines successfully loaded.', 'success');
 });
+
+// Automatic first-run setup checker
+async function checkAndSetupFirstRun() {
+  logStatus('Checking system dependencies...', 'info');
+  try {
+    const deps = await window.api.checkDependencies();
+    
+    // Determine what needs to be downloaded
+    const missingFfmpeg = !deps.ffmpeg;
+    const missingPiper = !deps.piperEngine;
+    const missingWhisper = !deps.whisperEngine;
+    
+    // Check Whisper models
+    let missingWhisperModel = false;
+    try {
+      const models = await window.api.getAvailableModels();
+      if (!models || models.length === 0) {
+        missingWhisperModel = true;
+      }
+    } catch (e) {
+      missingWhisperModel = true;
+    }
+    
+    // Check Piper voices
+    let missingPiperVoice = false;
+    try {
+      const voices = await window.api.getVoices();
+      if (!voices || voices.length === 0) {
+        missingPiperVoice = true;
+      }
+    } catch (e) {
+      missingPiperVoice = true;
+    }
+
+    const needsSetup = missingFfmpeg || missingPiper || missingWhisper || missingWhisperModel || missingPiperVoice;
+
+    if (!needsSetup) {
+      logStatus('All core engines and models are present.', 'success');
+      return;
+    }
+
+    logStatus('First-run dependencies missing. Launching automatic setup...', 'warning');
+    
+    // Show download overlay dialog modal
+    modelDownloadOverlay.style.display = 'flex';
+    modelDownloadOverlay.classList.remove('d-none');
+    
+    const descEl = modelDownloadOverlay.querySelector('p');
+    const originalDesc = descEl ? descEl.innerText : '';
+
+    // 1. Download FFmpeg if missing
+    if (missingFfmpeg) {
+      logStatus('Downloading FFmpeg core dependency...', 'system');
+      if (descEl) descEl.innerText = "Downloading and extracting FFmpeg audio transcoding tools. Please wait...";
+      downloadTitle.innerText = "Installing FFmpeg";
+      downloadProgressBar.style.width = '0%';
+      downloadPct.innerText = '0%';
+      downloadBytes.innerText = 'Initializing...';
+      
+      const res = await window.api.downloadFfmpeg();
+      if (!res.success) {
+        throw new Error(`FFmpeg setup failed: ${res.error}`);
+      }
+      logStatus('FFmpeg configured successfully.', 'success');
+    }
+
+    // 2. Download Piper Engine if missing
+    if (missingPiper) {
+      logStatus('Downloading Piper Neural TTS Engine...', 'system');
+      if (descEl) descEl.innerText = "Downloading and extracting Piper text-to-speech engine binaries. Please wait...";
+      downloadTitle.innerText = "Installing Piper Engine";
+      downloadProgressBar.style.width = '0%';
+      downloadPct.innerText = '0%';
+      downloadBytes.innerText = 'Initializing...';
+      
+      const res = await window.api.downloadPiper();
+      if (!res.success) {
+        throw new Error(`Piper Engine setup failed: ${res.error}`);
+      }
+      logStatus('Piper Engine configured successfully.', 'success');
+      await populateVoices();
+    }
+
+    // 3. Download Whisper Engine if missing
+    if (missingWhisper) {
+      logStatus('Downloading Whisper.cpp transcription engine...', 'system');
+      if (descEl) descEl.innerText = "Downloading and extracting Whisper speech-to-text engine binaries. Please wait...";
+      downloadTitle.innerText = "Installing Whisper Engine";
+      downloadProgressBar.style.width = '0%';
+      downloadPct.innerText = '0%';
+      downloadBytes.innerText = 'Initializing...';
+      
+      const res = await window.api.downloadWhisperEngine();
+      if (!res.success) {
+        throw new Error(`Whisper Engine setup failed: ${res.error}`);
+      }
+      logStatus('Whisper Engine configured successfully.', 'success');
+      await syncModels();
+    }
+
+    // 4. Download Whisper default model (ggml-tiny.bin) if missing
+    if (missingWhisperModel) {
+      const defaultModel = 'ggml-tiny.bin';
+      logStatus(`Downloading default Whisper model (${defaultModel})...`, 'system');
+      if (descEl) descEl.innerText = `Downloading default speech recognition model weight (${defaultModel}). This might take a few moments.`;
+      downloadTitle.innerText = "Downloading Whisper Model";
+      downloadProgressBar.style.width = '0%';
+      downloadPct.innerText = '0%';
+      downloadBytes.innerText = 'Initializing...';
+      
+      // Register temporary progress listeners
+      window.api.onDownloadProgress((data) => {
+        downloadProgressBar.style.width = `${data.percentage}%`;
+        downloadPct.innerText = `${data.percentage}%`;
+        downloadBytes.innerText = `Downloaded ${formatBytes(data.downloaded)} / ${formatBytes(data.total)}`;
+      });
+      
+      const res = await window.api.downloadModel(defaultModel);
+      if (!res.success) {
+        throw new Error(`Whisper model setup failed: ${res.error}`);
+      }
+      logStatus('Whisper default model cached successfully.', 'success');
+      await syncModels();
+      modelSelect.value = defaultModel;
+      currentModel = defaultModel;
+      await window.api.setActiveModel(defaultModel);
+    }
+
+    // 5. Download Piper default voice model (en_US-joe-medium.onnx) if missing
+    if (missingPiperVoice) {
+      const defaultVoice = 'en_US-joe-medium.onnx';
+      logStatus(`Downloading default Piper voice model (${defaultVoice})...`, 'system');
+      if (descEl) descEl.innerText = `Downloading default voice synthesis model (${defaultVoice}). Please wait...`;
+      downloadTitle.innerText = "Downloading Piper Voice";
+      downloadProgressBar.style.width = '0%';
+      downloadPct.innerText = '0%';
+      downloadBytes.innerText = 'Initializing...';
+      
+      // Register temporary progress listeners
+      window.api.onVoiceDownloadProgress((data) => {
+        downloadProgressBar.style.width = `${data.percentage}%`;
+        downloadPct.innerText = `${data.percentage}%`;
+        downloadBytes.innerText = `Downloaded ${formatBytes(data.downloaded)} / ${formatBytes(data.total)}`;
+      });
+      
+      const res = await window.api.downloadVoiceModel(defaultVoice);
+      if (!res.success) {
+        throw new Error(`Piper voice setup failed: ${res.error}`);
+      }
+      logStatus('Piper default voice model cached successfully.', 'success');
+      await populateVoices();
+    }
+
+    alert('First-run dependencies setup completed successfully! All offline modules are ready for use.');
+
+  } catch (err) {
+    console.error('[First Run Setup Error]', err);
+    logStatus(`Setup Error: ${err.message}`, 'error');
+    alert(`First-run setup failed:\n${err.message}\n\nYou can retry downloading missing modules manually from the "Download Engines" menu.`);
+  } finally {
+    // Hide overlay and restore default texts
+    modelDownloadOverlay.style.display = 'none';
+    modelDownloadOverlay.classList.add('d-none');
+    
+    // Reset overlay titles to standard models
+    downloadTitle.innerText = "Downloading Model";
+  }
+}
 
 // Helper for UI Console Logger
 function logStatus(message, type = 'info') {
