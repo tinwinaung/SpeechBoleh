@@ -39,8 +39,6 @@
       "index.html",
       "index.css",
       "assets/**/*",
-      "bin/**/*",
-      "!bin/**/*.zip",
       "node_modules/**/*"
     ],
     "win": {

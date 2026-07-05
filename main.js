@@ -115,16 +115,44 @@ function createWindow() {
       webSecurity: true // Keeps the application secure while custom media protocol handles audio loading
     },
     title: "Local STT & TTS Pipeline Client",
-    autoHideMenuBar: true
+    autoHideMenuBar: true,
+    frame: false
   });
 
   mainWindow.setMenu(null);
   mainWindow.loadFile('index.html');
 
+  mainWindow.on('maximize', () => {
+    mainWindow.webContents.send('window-maximized-state', true);
+  });
+
+  mainWindow.on('unmaximize', () => {
+    mainWindow.webContents.send('window-maximized-state', false);
+  });
+
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
 }
+
+// IPC: Custom Window Control Actions
+ipcMain.on('window-minimize', () => {
+  if (mainWindow) mainWindow.minimize();
+});
+
+ipcMain.on('window-maximize', () => {
+  if (mainWindow) {
+    if (mainWindow.isMaximized()) {
+      mainWindow.unmaximize();
+    } else {
+      mainWindow.maximize();
+    }
+  }
+});
+
+ipcMain.on('window-close', () => {
+  if (mainWindow) mainWindow.close();
+});
 
 // ----------------------------------------------------
 // Microsoft Visual C++ Redistributable Checker

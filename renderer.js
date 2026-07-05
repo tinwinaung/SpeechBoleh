@@ -42,6 +42,14 @@ const btnDownloadFfmpegUi = document.getElementById('btn-download-ffmpeg-ui');
 const btnDownloadPiperUi = document.getElementById('btn-download-piper-ui');
 const btnDownloadWhisperUi = document.getElementById('btn-download-whisper-ui');
 
+// Custom Window Controls
+const titleBarMinimize = document.getElementById('title-bar-minimize');
+const titleBarMaximize = document.getElementById('title-bar-maximize');
+const titleBarClose = document.getElementById('title-bar-close');
+const maximizeIcon = document.getElementById('maximize-icon');
+const titleBarSettings = document.getElementById('title-bar-settings');
+const titleBarInfo = document.getElementById('title-bar-info');
+
 // Whisper Model Downloader & Diagnostics elements
 const modelSelect = document.getElementById('model-select');
 const btnPlayMic = document.getElementById('btn-play-mic');
@@ -613,6 +621,39 @@ function setupEventListeners() {
     downloadProgressBar.style.width = `${data.progress}%`;
     downloadPct.innerText = `${data.progress}%`;
     downloadBytes.innerText = data.msg;
+  });
+
+  // Custom Window Controls listeners
+  titleBarMinimize.addEventListener('click', () => {
+    window.api.minimizeWindow();
+  });
+
+  titleBarMaximize.addEventListener('click', () => {
+    window.api.maximizeWindow();
+  });
+
+  titleBarClose.addEventListener('click', () => {
+    window.api.closeWindow();
+  });
+
+  // Handle changing maximize icon state from the main process events
+  window.api.onWindowMaximizedState((isMaximized) => {
+    if (isMaximized) {
+      maximizeIcon.className = 'bi bi-windows';
+    } else {
+      maximizeIcon.className = 'bi bi-square';
+    }
+  });
+
+  // Settings & Info click listeners
+  titleBarSettings.addEventListener('click', () => {
+    logStatus('Settings toggled from title bar.', 'system');
+    alert('Settings panel under active development for SpeechBoleh Beta!');
+  });
+
+  titleBarInfo.addEventListener('click', () => {
+    logStatus('About dialog opened from title bar.', 'system');
+    alert('SpeechBoleh - Local Offline STT & TTS Client\nVersion: Beta v0.5.0\nPowered by Whisper.cpp & Piper Engine');
   });
 }
 

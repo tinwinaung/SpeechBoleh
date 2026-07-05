@@ -154,5 +154,13 @@ contextBridge.exposeInMainWorld('api', {
    * Event listener for Menu bar Whisper download triggers
    * @param {function} callback
    */
-  onTriggerWhisperDownload: (callback) => ipcRenderer.on('trigger-whisper-download', (event) => callback())
+  onTriggerWhisperDownload: (callback) => ipcRenderer.on('trigger-whisper-download', (event) => callback()),
+
+  /**
+   * Frameless Window Actions
+   */
+  minimizeWindow: () => ipcRenderer.send('window-minimize'),
+  maximizeWindow: () => ipcRenderer.send('window-maximize'),
+  closeWindow: () => ipcRenderer.send('window-close'),
+  onWindowMaximizedState: (callback) => ipcRenderer.on('window-maximized-state', (event, isMaximized) => callback(isMaximized))
 });

@@ -15,6 +15,33 @@
 
 <body>
 
+  <!-- Custom Title Bar -->
+  <div id="custom-title-bar" class="d-flex align-items-center justify-content-between bg-dark border-bottom border-secondary border-opacity-10 px-3 py-0 user-select-none" style="-webkit-app-region: drag; height: 32px; font-size: 0.75rem; color: #a3a3a3;">
+    <!-- Left: App Logo, Title, and Action/Functional Icons -->
+    <div class="d-flex align-items-center gap-2">
+      <i class="bi bi-soundwave text-cyan fs-6"></i>
+      <span class="fw-semibold text-white-50">SpeechBoleh</span>
+      <span class="badge bg-secondary bg-opacity-25 text-secondary px-1.5 py-0.5 rounded-pill" style="font-size: 0.6rem;">Beta v0.5.0</span>
+      <div class="d-flex align-items-center gap-2 ms-3 border-start border-secondary border-opacity-20 ps-3" style="-webkit-app-region: no-drag;">
+        <button class="btn btn-link p-0 text-secondary border-0 hover-light" id="title-bar-settings" title="Settings" style="font-size: 0.8rem; line-height: 1;"><i class="bi bi-gear-fill"></i></button>
+        <button class="btn btn-link p-0 text-secondary border-0 hover-light" id="title-bar-info" title="About SpeechBoleh" style="font-size: 0.8rem; line-height: 1;"><i class="bi bi-info-circle-fill"></i></button>
+      </div>
+    </div>
+
+    <!-- Right: Window control buttons using Bootstrap Icons -->
+    <div class="d-flex align-items-center" style="-webkit-app-region: no-drag;">
+      <button class="title-bar-btn" id="title-bar-minimize" title="Minimize">
+        <i class="bi bi-dash-lg"></i>
+      </button>
+      <button class="title-bar-btn" id="title-bar-maximize" title="Maximize">
+        <i class="bi bi-square" id="maximize-icon"></i>
+      </button>
+      <button class="title-bar-btn close-btn" id="title-bar-close" title="Close">
+        <i class="bi bi-x-lg"></i>
+      </button>
+    </div>
+  </div>
+
   <!-- Header Section -->
   <header
     class="py-3 px-4 border-bottom border-secondary border-opacity-10 d-flex justify-content-between align-items-center bg-dark bg-opacity-30">
