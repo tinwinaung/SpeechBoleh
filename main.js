@@ -242,13 +242,37 @@ function checkAndInstallMsvc() {
 function launchInstaller(exePath) {
   console.log(`[System] Launching VC++ Redistributable installer: ${exePath}`);
   try {
+    // Minimize the application main window
+    if (mainWindow) {
+      mainWindow.minimize();
+    }
+
     const child = spawn(exePath, [], {
-      detached: true,
       stdio: 'ignore'
     });
-    child.unref();
+
+    child.on('close', (code) => {
+      console.log(`[System] VC++ Redistributable installer process closed with code ${code}`);
+      // Restore and focus the application window when setup completes
+      if (mainWindow) {
+        mainWindow.restore();
+        mainWindow.focus();
+      }
+    });
+
+    child.on('error', (err) => {
+      console.error('[System] VC++ Redistributable installer process error:', err);
+      if (mainWindow) {
+        mainWindow.restore();
+        mainWindow.focus();
+      }
+    });
   } catch (spawnErr) {
     console.error('[System] Failed to launch redistributable installer:', spawnErr);
+    if (mainWindow) {
+      mainWindow.restore();
+      mainWindow.focus();
+    }
   }
 }
 
