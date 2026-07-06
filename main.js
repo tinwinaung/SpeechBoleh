@@ -113,7 +113,17 @@ function cleanupTempFiles() {
     if (fs.existsSync(tmpDir)) {
       const files = fs.readdirSync(tmpDir);
       for (const file of files) {
-        fs.unlinkSync(path.join(tmpDir, file));
+        const filePath = path.join(tmpDir, file);
+        try {
+          const stat = fs.statSync(filePath);
+          if (stat.isDirectory()) {
+            fs.rmSync(filePath, { recursive: true, force: true });
+          } else {
+            fs.unlinkSync(filePath);
+          }
+        } catch (fileErr) {
+          console.warn(`[Cleanup] Failed to remove ${file}:`, fileErr.message);
+        }
       }
       console.log('[Cleanup] Temporary files successfully purged.');
     }
@@ -309,6 +319,9 @@ function launchInstaller(exePath) {
 // Auto-Granting Media Permissions inside Electron
 // ----------------------------------------------------
 app.whenReady().then(async () => {
+  // Clean up any stale files from previous run on startup
+  cleanupTempFiles();
+
   // Set up safe local media streaming protocol
   protocol.handle('media', (request) => {
     const rawUrl = request.url;
@@ -350,6 +363,10 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
   }
+});
+
+app.on('will-quit', () => {
+  cleanupTempFiles();
 });
 
 // ----------------------------------------------------
@@ -418,7 +435,7 @@ ipcMain.handle('audio-stt', async (event, inputPath) => {
     // 3. Clean up transcoded file immediately
     try {
       if (fs.existsSync(transOutPath)) {
-        //fs.unlinkSync(transOutPath);
+        fs.unlinkSync(transOutPath);
       }
     } catch (cleanErr) {
       console.warn('[Cleanup] Failed to remove transcode file:', cleanErr);
@@ -430,7 +447,7 @@ ipcMain.handle('audio-stt', async (event, inputPath) => {
     // Cleanup on failure
     try {
       if (fs.existsSync(transOutPath)) {
-        //fs.unlinkSync(transOutPath);
+        fs.unlinkSync(transOutPath);
       }
     } catch (e) { }
     return { success: false, error: error.message };
