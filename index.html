@@ -578,6 +578,28 @@
     </div>
   </div>
 
+  <!-- Custom Application Dialog Modal (Replaces native alert/confirm) -->
+  <div class="modal fade" id="appDialogModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="appDialogModalLabel" aria-hidden="true"
+    style="-webkit-app-region: no-drag;">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content bg-dark border border-secondary border-opacity-20 text-white shadow-lg"
+        style="border-radius: 12px;">
+        <div class="modal-header border-bottom border-secondary border-opacity-10 py-2.5 px-3">
+          <h5 class="modal-title fs-6 fw-bold text-white" id="appDialogModalLabel">SpeechBoleh Dialog</h5>
+        </div>
+        <div class="modal-body p-4">
+          <p class="small text-white-50 leading-relaxed mb-0" id="app-dialog-message">Message content</p>
+        </div>
+        <div class="modal-footer border-top border-secondary border-opacity-10 py-2 px-3">
+          <button type="button" class="btn btn-secondary btn-sm py-1 px-3 rounded-pill" id="btn-dialog-cancel"
+            style="font-size: 0.75rem;">Cancel</button>
+          <button type="button" class="btn btn-cyan btn-sm py-1 px-3 rounded-pill" id="btn-dialog-ok"
+            style="font-size: 0.75rem;">OK</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Global Fullscreen Download Progress Overlay -->
   <div id="model-download-overlay" class="loading-overlay">
     <div class="spinner-border text-cyan mb-3" role="status" style="width: 3rem; height: 3rem;"></div>

@@ -96,6 +96,94 @@ const statusConsole = document.getElementById('status-console');
 const logConsole = document.getElementById('log-console');
 const btnClearLogs = document.getElementById('btn-clear-logs');
 
+// Dialog Modal Cache
+const appDialogEl = document.getElementById('appDialogModal');
+const appDialogTitle = document.getElementById('appDialogModalLabel');
+const appDialogMessage = document.getElementById('app-dialog-message');
+let appDialogModalInstance = null;
+
+function getAppDialogModal() {
+  if (!appDialogModalInstance && typeof bootstrap !== 'undefined') {
+    appDialogModalInstance = new bootstrap.Modal(appDialogEl);
+  }
+  return appDialogModalInstance;
+}
+
+function showAppAlert(message, title = "SpeechBoleh Alert") {
+  // Hide fullscreen download overlay first if visible to prevent layout deadlock
+  if (modelDownloadOverlay && modelDownloadOverlay.style.display === 'flex') {
+    modelDownloadOverlay.style.setProperty('display', 'none', 'important');
+  }
+
+  return new Promise((resolve) => {
+    const modal = getAppDialogModal();
+    if (!modal) {
+      alert(message);
+      resolve();
+      return;
+    }
+    
+    appDialogTitle.innerText = title;
+    appDialogMessage.innerText = message;
+    
+    const cancelBtn = document.getElementById('btn-dialog-cancel');
+    const okBtn = document.getElementById('btn-dialog-ok');
+    
+    cancelBtn.style.display = 'none';
+    
+    const newOk = okBtn.cloneNode(true);
+    okBtn.parentNode.replaceChild(newOk, okBtn);
+    
+    newOk.addEventListener('click', () => {
+      modal.hide();
+      resolve();
+    });
+    
+    modal.show();
+  });
+}
+
+function showAppConfirm(message, title = "SpeechBoleh Confirmation") {
+  // Hide fullscreen download overlay first if visible to prevent layout deadlock
+  if (modelDownloadOverlay && modelDownloadOverlay.style.display === 'flex') {
+    modelDownloadOverlay.style.setProperty('display', 'none', 'important');
+  }
+
+  return new Promise((resolve) => {
+    const modal = getAppDialogModal();
+    if (!modal) {
+      resolve(confirm(message));
+      return;
+    }
+    
+    appDialogTitle.innerText = title;
+    appDialogMessage.innerText = message;
+    
+    const cancelBtn = document.getElementById('btn-dialog-cancel');
+    const okBtn = document.getElementById('btn-dialog-ok');
+    
+    cancelBtn.style.display = 'inline-block';
+    
+    const newOk = okBtn.cloneNode(true);
+    okBtn.parentNode.replaceChild(newOk, okBtn);
+    
+    const newCancel = cancelBtn.cloneNode(true);
+    cancelBtn.parentNode.replaceChild(newCancel, cancelBtn);
+    
+    newOk.addEventListener('click', () => {
+      modal.hide();
+      resolve(true);
+    });
+    
+    newCancel.addEventListener('click', () => {
+      modal.hide();
+      resolve(false);
+    });
+    
+    modal.show();
+  });
+}
+
 // ----------------------------------------------------
 // System Initialization
 // ----------------------------------------------------
@@ -283,12 +371,12 @@ async function checkAndSetupFirstRun() {
       await populateVoices();
     }
 
-    alert('First-run dependencies setup completed successfully! All offline modules are ready for use.');
+    await showAppAlert('First-run dependencies setup completed successfully! All offline modules are ready for use.');
 
   } catch (err) {
     console.error('[First Run Setup Error]', err);
     logStatus(`Setup Error: ${err.message}`, 'error');
-    alert(`First-run setup failed:\n${err.message}\n\nYou can retry downloading missing modules manually from the "Download Engines" menu.`);
+    await showAppAlert(`First-run setup failed:\n${err.message}\n\nYou can retry downloading missing modules manually from the "Download Engines" menu.`);
   } finally {
     // Hide overlay and restore default texts
     modelDownloadOverlay.style.setProperty('display', 'none', 'important');
@@ -366,7 +454,7 @@ async function handleVoiceChange() {
   const isDownloaded = cachedVoices.includes(targetVoice);
 
   if (!isDownloaded) {
-    if (isDownloadInProgress()) return;
+    if (await isDownloadInProgress()) return;
     // Show download UI (reusing modelDownloadOverlay)
     modelDownloadOverlay.style.setProperty('display', 'flex', 'important');
     downloadTitle.innerText = `Downloading Voice Model`;
@@ -396,7 +484,7 @@ async function handleVoiceChange() {
       }
     } catch (err) {
       console.error('[Voice Download Error]', err);
-      alert(`Voice Download Failed:\n${err.message}\nReverting selection.`);
+      await showAppAlert(`Voice Download Failed:\n${err.message}\nReverting selection.`);
       // Revert select back to default Lessac model
       voiceSelect.value = 'en_US-lessac-medium.onnx';
       return;
@@ -406,9 +494,9 @@ async function handleVoiceChange() {
   }
 }
 
-function isDownloadInProgress() {
+async function isDownloadInProgress() {
   if (modelDownloadOverlay.style.display === 'flex') {
-    alert("An engine installation or download is already in progress. Please wait until it completes.");
+    await showAppAlert("An engine installation or download is already in progress. Please wait until it completes.");
     return true;
   }
   return false;
@@ -450,9 +538,9 @@ async function populateMics() {
 
 async function triggerFfmpegDownloadFlow(customUrl, customVersion) {
   console.log('[DEBUG] triggerFfmpegDownloadFlow clicked');
-  if (isDownloadInProgress()) return;
+  if (await isDownloadInProgress()) return;
   if (!customUrl) {
-    const choice = confirm("This action will download and extract the latest FFmpeg Essentials build (approx. 90MB) from gyan.dev directly into your bin/ folder.\n\nAre you sure you want to download and install FFmpeg now?");
+    const choice = await showAppConfirm("This action will download and extract the latest FFmpeg Essentials build (approx. 90MB) from gyan.dev directly into your bin/ folder.\n\nAre you sure you want to download and install FFmpeg now?");
     if (!choice) {
       console.log('[DEBUG] User cancelled FFmpeg download prompt');
       return;
@@ -479,14 +567,14 @@ async function triggerFfmpegDownloadFlow(customUrl, customVersion) {
     const res = await window.api.downloadFfmpeg(customUrl, customVersion);
     if (res.success) {
       logStatus(`FFmpeg configured successfully at: ${res.path}`, "success");
-      alert(`FFmpeg downloaded and configured successfully!`);
+      await showAppAlert(`FFmpeg downloaded and configured successfully!`);
     } else {
       throw new Error(res.error || "Unknown configuration error");
     }
   } catch (err) {
     console.error("FFmpeg deployment failed:", err);
     logStatus(`FFmpeg Deployment Error: ${err.message}`, "error");
-    alert(`FFmpeg setup failed:\n${err.message}`);
+    await showAppAlert(`FFmpeg setup failed:\n${err.message}`);
   } finally {
     console.log('[DEBUG] Hiding modelDownloadOverlay...');
     modelDownloadOverlay.style.setProperty('display', 'none', 'important');
@@ -496,9 +584,9 @@ async function triggerFfmpegDownloadFlow(customUrl, customVersion) {
 
 async function triggerPiperDownloadFlow(customUrl, customVersion) {
   console.log('[DEBUG] triggerPiperDownloadFlow clicked');
-  if (isDownloadInProgress()) return;
+  if (await isDownloadInProgress()) return;
   if (!customUrl) {
-    const choice = confirm("This action will download and extract the latest prebuilt Piper TTS Engine (approx. 22MB) from GitHub directly into your bin/ folder.\n\nAre you sure you want to download and install the Piper Engine now?");
+    const choice = await showAppConfirm("This action will download and extract the latest prebuilt Piper TTS Engine (approx. 22MB) from GitHub directly into your bin/ folder.\n\nAre you sure you want to download and install the Piper Engine now?");
     if (!choice) {
       console.log('[DEBUG] User cancelled Piper download prompt');
       return;
@@ -522,7 +610,7 @@ async function triggerPiperDownloadFlow(customUrl, customVersion) {
     const res = await window.api.downloadPiper(customUrl, customVersion);
     if (res.success) {
       logStatus(`Piper engine configured successfully at: ${res.path}`, "success");
-      alert(`Piper engine downloaded and configured successfully!`);
+      await showAppAlert(`Piper engine downloaded and configured successfully!`);
       // Update voice lists to reflect potential new path sync
       await populateVoices();
     } else {
@@ -531,7 +619,7 @@ async function triggerPiperDownloadFlow(customUrl, customVersion) {
   } catch (err) {
     console.error("Piper deployment failed:", err);
     logStatus(`Piper Deployment Error: ${err.message}`, "error");
-    alert(`Piper setup failed:\n${err.message}`);
+    await showAppAlert(`Piper setup failed:\n${err.message}`);
   } finally {
     console.log('[DEBUG] Hiding modelDownloadOverlay...');
     modelDownloadOverlay.style.setProperty('display', 'none', 'important');
@@ -541,9 +629,9 @@ async function triggerPiperDownloadFlow(customUrl, customVersion) {
 
 async function triggerWhisperDownloadFlow(customUrl, customVersion) {
   console.log('[DEBUG] triggerWhisperDownloadFlow clicked');
-  if (isDownloadInProgress()) return;
+  if (await isDownloadInProgress()) return;
   if (!customUrl) {
-    const choice = confirm("This action will download and extract the prebuilt Whisper.cpp CPU Engine (approx. 8MB) from GitHub directly into your bin/ folder.\n\nAre you sure you want to download and install the Whisper.cpp Engine now?");
+    const choice = await showAppConfirm("This action will download and extract the prebuilt Whisper.cpp CPU Engine (approx. 8MB) from GitHub directly into your bin/ folder.\n\nAre you sure you want to download and install the Whisper.cpp Engine now?");
     if (!choice) {
       console.log('[DEBUG] User cancelled Whisper download prompt');
       return;
@@ -567,7 +655,7 @@ async function triggerWhisperDownloadFlow(customUrl, customVersion) {
     const res = await window.api.downloadWhisperEngine(customUrl, customVersion);
     if (res.success) {
       logStatus(`Whisper engine configured successfully at: ${res.path}`, "success");
-      alert(`Whisper.cpp engine downloaded and configured successfully!`);
+      await showAppAlert(`Whisper.cpp engine downloaded and configured successfully!`);
       // Update models list to reflect new paths
       await syncModels();
     } else {
@@ -576,7 +664,7 @@ async function triggerWhisperDownloadFlow(customUrl, customVersion) {
   } catch (err) {
     console.error("Whisper deployment failed:", err);
     logStatus(`Whisper Deployment Error: ${err.message}`, "error");
-    alert(`Whisper setup failed:\n${err.message}`);
+    await showAppAlert(`Whisper setup failed:\n${err.message}`);
   } finally {
     console.log('[DEBUG] Hiding modelDownloadOverlay...');
     modelDownloadOverlay.style.setProperty('display', 'none', 'important');
@@ -700,7 +788,7 @@ async function triggerCheckUpdateFlow() {
   } catch (err) {
     console.error("Update check failed:", err);
     logStatus(`Update Check Error: ${err.message}`, "error");
-    alert(`Failed to check for updates:\n${err.message}`);
+    await showAppAlert(`Failed to check for updates:\n${err.message}`);
   } finally {
     btnCheckUpdate.classList.remove('disabled');
   }
@@ -739,7 +827,7 @@ async function ensureModelDownloaded() {
 
   const isDownloaded = availableModels.includes(targetModel);
   if (!isDownloaded) {
-    if (isDownloadInProgress()) return false;
+    if (await isDownloadInProgress()) return false;
     // Show download UI
     modelDownloadOverlay.style.setProperty('display', 'flex', 'important');
     downloadTitle.innerText = `Downloading ${targetModel === 'ggml-tiny.bin' ? 'Tiny Model' : 'Base Model'}`;
@@ -770,7 +858,7 @@ async function ensureModelDownloaded() {
       }
     } catch (err) {
       console.error('[Model Download Error]', err);
-      alert(`Model Download Failed:\n${err.message}`);
+      await showAppAlert(`Model Download Failed:\n${err.message}`);
       return false;
     } finally {
       modelDownloadOverlay.style.setProperty('display', 'none', 'important');
@@ -800,7 +888,7 @@ async function handleModelChange() {
     }
   } catch (err) {
     console.error(err);
-    alert(`Failed to set model:\n${err.message}`);
+    await showAppAlert(`Failed to set model:\n${err.message}`);
     modelSelect.value = currentModel;
   }
 }
@@ -1106,7 +1194,7 @@ async function startRecording() {
       } catch (err) {
         console.error('Mic STT processing error:', err);
         logStatus(`STT Error: ${err.message}`, 'error');
-        alert(`Speech-to-Text Pipeline Failed:\n${err.message}`);
+        await showAppAlert(`Speech-to-Text Pipeline Failed:\n${err.message}`);
       } finally {
         sttLoadingOverlay.style.display = 'none';
       }
@@ -1135,7 +1223,7 @@ async function startRecording() {
   } catch (err) {
     console.error('Failed to get mic access', err);
     logStatus(`Permissions error: ${err.message}`);
-    alert(`Microphone Permission Blocked:\nEnsure permission check handlers are active in main.js. Details: ${err.message}`);
+    await showAppAlert(`Microphone Permission Blocked:\nEnsure permission check handlers are active in main.js. Details: ${err.message}`);
   }
 }
 
@@ -1248,7 +1336,7 @@ async function processAudioUpload() {
   } catch (err) {
     console.error('Audio file STT error:', err);
     logStatus(`STT Error: ${err.message}`, 'error');
-    alert(`Speech-to-Text Pipeline Failed:\n${err.message}`);
+    await showAppAlert(`Speech-to-Text Pipeline Failed:\n${err.message}`);
   } finally {
     sttLoadingOverlay.style.display = 'none';
   }
@@ -1342,7 +1430,7 @@ function toggleTtsFullscreen() {
 // ----------------------------------------------------
 async function handleTextFileImport(file) {
   if (file.type !== 'text/plain' && !file.name.endsWith('.txt')) {
-    alert('Please import a valid plain text file (.txt).');
+    await showAppAlert('Please import a valid plain text file (.txt).');
     return;
   }
 
@@ -1406,7 +1494,7 @@ async function synthesizeText() {
   const selectedVoice = voiceSelect.value;
 
   if (!text) {
-    alert('Please enter or import text to synthesize!');
+    await showAppAlert('Please enter or import text to synthesize!');
     return;
   }
 
@@ -1459,7 +1547,7 @@ async function synthesizeText() {
   } catch (err) {
     console.error('TTS Synthesis error:', err);
     logStatus(`TTS Error: ${err.message}`, 'error');
-    alert(`Text-to-Speech Engine Failed:\n${err.message}`);
+    await showAppAlert(`Text-to-Speech Engine Failed:\n${err.message}`);
   } finally {
     ttsLoadingOverlay.style.display = 'none';
   }
