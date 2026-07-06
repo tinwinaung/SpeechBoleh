@@ -24,8 +24,106 @@ let activeModel = 'ggml-base.bin';
 
 // Helper to resolve paths to binaries/assets, handling ASAR unpacking automatically
 function getAssetPath(...parts) {
-  const base = __dirname.replace('app.asar', 'app.asar.unpacked');
+  let base;
+  if (process.env.PORTABLE_EXECUTABLE_DIR) {
+    // Packaged Portable application: locate binaries next to the portable executable on host system
+    base = process.env.PORTABLE_EXECUTABLE_DIR;
+  } else {
+    // Installed application or Development mode: locate inside resources or project directory
+    base = __dirname.replace('app.asar', 'app.asar.unpacked');
+  }
   return path.join(base, ...parts);
+}
+
+// Helper to get component config (combines package.json defaults with writeable overrides)
+function getLocalComponentConfig(component) {
+  let config = null;
+
+  // 1. Read default configs from package.json packaged inside the ASAR
+  try {
+    const pkgPath = path.join(__dirname, 'package.json');
+    if (fs.existsSync(pkgPath)) {
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+      if (pkg.pkg && pkg.pkg[component]) {
+        config = { ...pkg.pkg[component] };
+      }
+    }
+  } catch (e) {
+    console.error(`[getLocalComponentConfig] Error reading default package.json for ${component}:`, e);
+  }
+
+  // 2. Overlay any writeable overrides from installed_components.json
+  try {
+    const overridePath = getComponentsConfigPath();
+    if (fs.existsSync(overridePath)) {
+      const overrides = JSON.parse(fs.readFileSync(overridePath, 'utf8'));
+      if (overrides[component]) {
+        config = { ...config, ...overrides[component] };
+      }
+    }
+  } catch (e) {
+    console.error(`[getLocalComponentConfig] Error reading overrides for ${component}:`, e);
+  }
+
+  return config;
+}
+
+// Helper to get the path to the writeable component metadata file
+function getComponentsConfigPath() {
+  if (process.env.PORTABLE_EXECUTABLE_DIR) {
+    // Portable: save config next to the portable exe (inside bin/) so it's fully self-contained
+    return path.join(process.env.PORTABLE_EXECUTABLE_DIR, 'bin', 'installed_components.json');
+  }
+  // Installed or Dev: save config inside the writeable user data directory
+  return path.join(app.getPath('userData'), 'installed_components.json');
+}
+
+// Helper to resolve the best URL and version for a component (tries online package.json first, falls back to local config)
+async function getComponentDownloadUrl(component, defaultFallbackUrl, defaultFallbackVersion = 'latest') {
+  const localConfig = getLocalComponentConfig(component);
+  const localVersion = localConfig ? localConfig.version : null;
+
+  // If local version is null, undefined, or the string "null" / "NULL", do NOT query the online version.
+  // Use the local package.json configuration directly.
+  const localVerStr = localVersion !== null && localVersion !== undefined ? String(localVersion).trim().toLowerCase() : null;
+  if (localVersion === null || localVersion === undefined || localVerStr === 'null' || localVerStr === '') {
+    const localUrl = localConfig && localConfig.url ? localConfig.url : defaultFallbackUrl;
+    const fallbackVer = localVersion || defaultFallbackVersion;
+    console.log(`[getComponentDownloadUrl] Local version for ${component} is NULL/undefined. Bypassing online lookup. Using local URL: ${localUrl}`);
+    return { url: localUrl, version: fallbackVer, source: 'local' };
+  }
+
+  try {
+    // Try fetching online package.json with a timeout
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), 3000); // 3-second timeout
+
+    const response = await fetch('https://raw.githubusercontent.com/tinwinaung/SpeechBoleh/main/package.json', { signal: id.signal });
+    clearTimeout(id);
+
+    if (response.ok) {
+      const data = await response.json();
+      if (data.pkg && data.pkg[component] && data.pkg[component].url) {
+        const onlineUrl = data.pkg[component].url;
+        const onlineVersion = data.pkg[component].version || 'latest';
+        console.log(`[getComponentDownloadUrl] Resolved online URL for ${component}: ${onlineUrl} (version: ${onlineVersion})`);
+        return { url: onlineUrl, version: onlineVersion, source: 'online' };
+      }
+    }
+  } catch (e) {
+    console.warn(`[getComponentDownloadUrl] Failed to fetch online package.json for ${component}:`, e.message);
+  }
+
+  // Fall back to local package.json
+  if (localConfig && localConfig.url) {
+    const localUrl = localConfig.url;
+    const localVersionVal = localConfig.version || 'latest';
+    console.log(`[getComponentDownloadUrl] Resolved local package.json URL for ${component}: ${localUrl}`);
+    return { url: localUrl, version: localVersionVal, source: 'local' };
+  }
+
+  console.log(`[getComponentDownloadUrl] Resolved default fallback URL for ${component}: ${defaultFallbackUrl}`);
+  return { url: defaultFallbackUrl, version: defaultFallbackVersion, source: 'fallback' };
 }
 
 // Ensure temp directory exists inside writable user data if packaged
@@ -609,34 +707,90 @@ ipcMain.handle('delete-file', async (event, filePath) => {
   }
 });
 
-// Helper: Update a component's config in the local package.json file
+// Helper: Update a component's config in the writeable override config file
 function updateLocalPackageJson(component, url, version) {
   try {
-    const pkgPath = path.join(__dirname, 'package.json');
-    if (fs.existsSync(pkgPath)) {
-      const data = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
-      if (!data.pkg) data.pkg = {};
-      if (!data.pkg[component]) data.pkg[component] = {};
-      data.pkg[component].url = url;
-      data.pkg[component].version = version;
-      fs.writeFileSync(pkgPath, JSON.stringify(data, null, 2), 'utf8');
-      console.log(`[package.json] Dynamic update successful for ${component} to version ${version}`);
+    const overridePath = getComponentsConfigPath();
+    
+    // Ensure parent directory exists (especially for portable bin/ folder)
+    const parentDir = path.dirname(overridePath);
+    if (!fs.existsSync(parentDir)) {
+      fs.mkdirSync(parentDir, { recursive: true });
     }
+
+    let data = {};
+    if (fs.existsSync(overridePath)) {
+      try {
+        data = JSON.parse(fs.readFileSync(overridePath, 'utf8'));
+      } catch (e) {
+        console.warn(`[updateLocalPackageJson] Corrupt override file found, resetting:`, e.message);
+      }
+    }
+
+    if (!data[component]) data[component] = {};
+    data[component].url = url;
+    data[component].version = version;
+
+    fs.writeFileSync(overridePath, JSON.stringify(data, null, 2), 'utf8');
+    console.log(`[installed_components.json] Update successful for ${component} to version ${version}`);
   } catch (err) {
-    console.error(`[package.json] Dynamic update failed for ${component}:`, err);
+    console.error(`[installed_components.json] Update failed for ${component}:`, err);
   }
 }
 
 // Helper: Check if remote version is larger than local version
 function isVersionNewer(local, remote) {
-  const localParts = String(local).split('-')[0].split('.').map(Number);
-  const remoteParts = String(remote).split('-')[0].split('.').map(Number);
-  for (let i = 0; i < 3; i++) {
+  const localClean = String(local).split('-')[0];
+  const remoteClean = String(remote).split('-')[0];
+
+  // If either is not standard numeric dot-separated format, treat as plain text strings
+  const hasLocalNumbers = localClean.split('.').length > 0 && localClean.split('.').every(x => x.trim() !== '' && !isNaN(Number(x)));
+  const hasRemoteNumbers = remoteClean.split('.').length > 0 && remoteClean.split('.').every(x => x.trim() !== '' && !isNaN(Number(x)));
+
+  if (!hasLocalNumbers || !hasRemoteNumbers) {
+    // If they are identical text strings, no update is needed.
+    if (String(local).trim().toLowerCase() === String(remote).trim().toLowerCase()) {
+      return false;
+    }
+    // If they are different text strings, flag update required (return true)
+    return true;
+  }
+
+  // 1. Compare core semantic version parts (e.g. 2023.11.14)
+  const localParts = localClean.split('.').map(Number);
+  const remoteParts = remoteClean.split('.').map(Number);
+  for (let i = 0; i < Math.max(localParts.length, remoteParts.length); i++) {
     const localPart = localParts[i] || 0;
     const remotePart = remoteParts[i] || 0;
     if (remotePart > localPart) return true;
     if (localPart > remotePart) return false;
   }
+  
+  // 2. If core versions are identical, compare build tags after '-' if they exist
+  const localSplit = String(local).split('-');
+  const remoteSplit = String(remote).split('-');
+  
+  const localSuffix = localSplit[1];
+  const remoteSuffix = remoteSplit[1];
+  
+  if (localSuffix !== undefined && remoteSuffix !== undefined) {
+    if (localSuffix.trim().toLowerCase() === remoteSuffix.trim().toLowerCase()) {
+      return false;
+    }
+    const localNum = Number(localSuffix);
+    const remoteNum = Number(remoteSuffix);
+    if (!isNaN(localNum) && !isNaN(remoteNum)) {
+      return remoteNum > localNum;
+    }
+    // Suffixes are text strings and they differ: flag update required
+    return true;
+  }
+  
+  // If remote has a suffix but local doesn't, remote is newer (e.g. 2023.11.14-1 > 2023.11.14)
+  if (localSuffix === undefined && remoteSuffix !== undefined) {
+    return true;
+  }
+  
   return false;
 }
 
@@ -666,7 +820,8 @@ ipcMain.handle('check-for-updates', async () => {
 
   const getLocalComponentVersion = (name, installed) => {
     if (!installed) return 'Not Installed';
-    return (localPkg.pkg && localPkg.pkg[name] && localPkg.pkg[name].version) || 'latest';
+    const compConfig = getLocalComponentConfig(name);
+    return (compConfig && compConfig.version) || 'latest';
   };
 
   const ffmpegLocalVersion = getLocalComponentVersion('ffmpeg', ffmpegInstalled);
@@ -1017,11 +1172,27 @@ ipcMain.handle('download-ffmpeg', async (event, customUrl, customVersion) => {
   const ffmpegTargetDir = getAssetPath('bin', 'ffmpeg', 'bin');
   const ffmpegFinalPath = path.join(ffmpegTargetDir, 'ffmpeg.exe');
 
-  // URL for latest stable essentials build from gyan.dev, with a reliable fallback GitHub release mirror
-  const ffmpegUrl = 'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip';
+  // Load default URL from local package.json if available
+  const pkgConfig = getLocalComponentConfig('ffmpeg');
+  const ffmpegUrl = pkgConfig ? pkgConfig.url : 'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip';
   const ffmpegFallbackUrl = 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip';
 
   let backedUp = false;
+  let downloadLink;
+  let downloadVersion;
+  let resolvedOnline = false;
+
+  if (customUrl) {
+    downloadLink = customUrl;
+    downloadVersion = customVersion || 'latest';
+  } else {
+    const resolved = await getComponentDownloadUrl('ffmpeg', ffmpegUrl, 'latest');
+    downloadLink = resolved.url;
+    downloadVersion = resolved.version;
+    if (resolved.source === 'online') {
+      resolvedOnline = true;
+    }
+  }
 
   try {
     // 1. Ensure temp directory exists
@@ -1050,7 +1221,6 @@ ipcMain.handle('download-ffmpeg', async (event, customUrl, customVersion) => {
 
     // 5. Download the zip file with primary/fallback try-catch
     try {
-      const downloadLink = customUrl || ffmpegUrl;
       await downloadUrlToFile(downloadLink, ffmpegZipDest, (downloaded, total) => {
         const percentage = total ? Math.round((downloaded / total) * 100) : 0;
         sendStatus(`Downloading FFmpeg archive: ${percentage}%`, percentage);
@@ -1109,8 +1279,8 @@ ipcMain.handle('download-ffmpeg', async (event, customUrl, customVersion) => {
       }
       // Re-configure FFmpeg path globally for fluent-ffmpeg now that it exists locally
       configureFfmpeg();
-      if (customUrl && customVersion) {
-        updateLocalPackageJson('ffmpeg', customUrl, customVersion);
+      if (customUrl || resolvedOnline) {
+        updateLocalPackageJson('ffmpeg', downloadLink, downloadVersion);
       }
       return { success: true, path: ffmpegFinalPath };
     } else {
@@ -1209,9 +1379,26 @@ ipcMain.handle('download-piper', async (event, customUrl, customVersion) => {
   const piperTargetDirBak = piperTargetDir + '_bak';
   const piperZipDest = path.join(tmpDir, 'piper.zip');
   const piperFinalExe = path.join(piperTargetDir, 'piper', 'piper.exe');
-  const url = 'https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_windows_amd64.zip';
+  // Load default URL from local package.json if available
+  const pkgConfig = getLocalComponentConfig('piper');
+  const url = pkgConfig ? pkgConfig.url : 'https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_windows_amd64.zip';
 
   let backedUp = false;
+  let downloadLink;
+  let downloadVersion;
+  let resolvedOnline = false;
+
+  if (customUrl) {
+    downloadLink = customUrl;
+    downloadVersion = customVersion || 'latest';
+  } else {
+    const resolved = await getComponentDownloadUrl('piper', url, 'latest');
+    downloadLink = resolved.url;
+    downloadVersion = resolved.version;
+    if (resolved.source === 'online') {
+      resolvedOnline = true;
+    }
+  }
 
   try {
     if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
@@ -1230,7 +1417,6 @@ ipcMain.handle('download-piper', async (event, customUrl, customVersion) => {
     if (!fs.existsSync(piperTargetDir)) fs.mkdirSync(piperTargetDir, { recursive: true });
 
     sendStatus('Downloading Piper Neural TTS Engine (approx. 22MB)...', 0);
-    const downloadLink = customUrl || url;
     await downloadUrlToFile(downloadLink, piperZipDest, (downloaded, total) => {
       const percentage = total ? Math.round((downloaded / total) * 100) : 0;
       sendStatus(`Downloading Piper: ${percentage}%`, percentage);
@@ -1259,8 +1445,8 @@ ipcMain.handle('download-piper', async (event, customUrl, customVersion) => {
       if (backedUp && fs.existsSync(piperTargetDirBak)) {
         fs.rmSync(piperTargetDirBak, { recursive: true, force: true });
       }
-      if (customUrl && customVersion) {
-        updateLocalPackageJson('piper', customUrl, customVersion);
+      if (customUrl || resolvedOnline) {
+        updateLocalPackageJson('piper', downloadLink, downloadVersion);
       }
       return { success: true, path: piperFinalExe };
     } else {
@@ -1299,9 +1485,26 @@ ipcMain.handle('download-whisper-engine', async (event, customUrl, customVersion
   const whisperZipDest = path.join(tmpDir, 'whisper.zip');
   const whisperTargetDir = getAssetPath('bin', 'whisper', 'Release');
   const whisperFinalExe = path.join(whisperTargetDir, 'whisper-cli.exe');
-  const url = 'https://github.com/ggml-org/whisper.cpp/releases/download/v1.9.1/whisper-bin-x64.zip';
+  // Load default URL from local package.json if available
+  const pkgConfig = getLocalComponentConfig('whisper');
+  const url = pkgConfig ? pkgConfig.url : 'https://github.com/ggml-org/whisper.cpp/releases/download/v1.9.1/whisper-bin-x64.zip';
 
   let backedUp = false;
+  let downloadLink;
+  let downloadVersion;
+  let resolvedOnline = false;
+
+  if (customUrl) {
+    downloadLink = customUrl;
+    downloadVersion = customVersion || 'latest';
+  } else {
+    const resolved = await getComponentDownloadUrl('whisper', url, 'latest');
+    downloadLink = resolved.url;
+    downloadVersion = resolved.version;
+    if (resolved.source === 'online') {
+      resolvedOnline = true;
+    }
+  }
 
   try {
     if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
@@ -1320,7 +1523,6 @@ ipcMain.handle('download-whisper-engine', async (event, customUrl, customVersion
     if (!fs.existsSync(whisperTargetDir)) fs.mkdirSync(whisperTargetDir, { recursive: true });
 
     sendStatus('Downloading Whisper.cpp Engine (approx. 8MB)...', 0);
-    const downloadLink = customUrl || url;
     await downloadUrlToFile(downloadLink, whisperZipDest, (downloaded, total) => {
       const percentage = total ? Math.round((downloaded / total) * 100) : 0;
       sendStatus(`Downloading Whisper: ${percentage}%`, percentage);
@@ -1388,8 +1590,8 @@ ipcMain.handle('download-whisper-engine', async (event, customUrl, customVersion
       if (backedUp && fs.existsSync(whisperBaseDirBak)) {
         fs.rmSync(whisperBaseDirBak, { recursive: true, force: true });
       }
-      if (customUrl && customVersion) {
-        updateLocalPackageJson('whisper', customUrl, customVersion);
+      if (customUrl || resolvedOnline) {
+        updateLocalPackageJson('whisper', downloadLink, downloadVersion);
       }
       return { success: true, path: whisperFinalExe };
     } else {

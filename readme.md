@@ -102,9 +102,6 @@ npm run dist
 * **ONNX Runtime (Embedded)**: Loaded via Piper to process ONNX-based voice models (`en_US-lessac-medium.onnx`, `en_US-joe-medium.onnx`, `en_US-ryan-medium.onnx`).
 * **Hugging Face Downloader**: Downloads voice models (`.onnx` and `.json` configs) dynamically to your offline cache directory.
 
-### Resources
-Please read external resources [here](bin/readme.md)
----
 
 ## 📁 Project Architecture & Components
 
@@ -130,6 +127,92 @@ graph TD
 * **`renderer.js`**: Handles device selection (`navigator.mediaDevices`), starts/stops `MediaRecorder` buffers, monitors audio timelines, updates progress bars, and manages console log lines.
 * **`index.html`**: Contains the visual workspace grid, tabs for recording vs. uploading files, and collapsible panels for advanced synthesis configurations.
 * **`index.css`**: Styling rules, glowing buttons, visualizer waves, animations, and typography.
+
+---
+
+## 🔄 Version Comparison Flow for OTA
+
+SpeechBoleh utilizes a hybrid OTA version-check comparison engine. Below is the decision tree used to evaluate if a component requires an update:
+
+```mermaid
+flowchart TD
+    Start([Start Version Check]) --> CheckInstalled{Is local component installed?}
+    CheckInstalled -->|No| ReqUpdate[Flag: Update Required]
+    CheckInstalled -->|Yes| ParseVersions[Parse Local & Remote Versions]
+    
+    ParseVersions --> MatchLatest{Are both versions 'latest'?}
+    MatchLatest -->|Yes| UpToDate[Flag: Up-to-Date]
+    MatchLatest -->|No| CheckLatestLocal{Is Local 'latest' & Remote a number?}
+    CheckLatestLocal -->|Yes| ReqUpdate
+    CheckLatestLocal -->|No| CheckLatestRemote{Is Remote 'latest' & Local a number?}
+    CheckLatestRemote -->|Yes| ReqUpdate
+    
+    CheckLatestRemote -->|No| CheckTextFormat{Is either version a non-numeric string?}
+    CheckTextFormat -->|Yes| MatchText{Do text versions match exactly?}
+    MatchText -->|No| ReqUpdate
+    MatchText -->|Yes| UpToDate
+    
+    CheckTextFormat -->|No| CompareCore[Compare Core Semantic Numbers: major.minor.patch]
+    CompareCore --> CoreDiff{Is remote core version newer?}
+    CoreDiff -->|Yes| ReqUpdate
+    CoreDiff -->|No, local is newer| UpToDate
+    CoreDiff -->|Equal| CheckSuffixes{Do hyphen build suffixes exist?}
+    
+    CheckSuffixes -->|Neither has suffix| UpToDate
+    CheckSuffixes -->|Only Remote has suffix| ReqUpdate
+    CheckSuffixes -->|Only Local has suffix| UpToDate
+    CheckSuffixes -->|Both have suffixes| CompareSuffix{Is remote suffix newer?}
+    CompareSuffix -->|Yes| ReqUpdate
+    CompareSuffix -->|No| UpToDate
+```
+
+---
+
+## 📥 Component Installation & Initialization Flow
+
+SpeechBoleh automatically checks platform requirements and missing engine binaries at startup. Below is the bootstrap and installation flow:
+
+```mermaid
+flowchart TD
+    Start([App Startup]) --> PlatformCheck{Is OS Windows?}
+    PlatformCheck -->|Yes| MSVCCheck{Is MSVC++ 2015-2022 Runtime installed?}
+    PlatformCheck -->|No| DepCheck[Scan core binaries: FFmpeg, Piper, Whisper]
+    
+    MSVCCheck -->|No| PromptMSVC[Prompt User & Launch MSVC Installer]
+    MSVCCheck -->|Yes| DepCheck
+    PromptMSVC --> DepCheck
+    
+    DepCheck --> CheckDeps{Are all core binaries present?}
+    CheckDeps -->|Yes| PopulateLists[Scan & load local mics, voices, and Whisper models]
+    CheckDeps -->|No| ShowOverlay[Display Fullscreen Download Overlay]
+    
+    ShowOverlay --> CheckLocalVersion{Is local version NULL/undefined?}
+    CheckLocalVersion -->|Yes| UseLocalUrl[Bypass online query. Use local package.json URLs]
+    CheckLocalVersion -->|No| ResolveUrls[Query Online raw package.json for download URLs]
+    
+    UseLocalUrl --> DownFFmpeg{Is FFmpeg missing?}
+    ResolveUrls --> DownFFmpeg
+    DownFFmpeg -->|Yes| InstallFFmpeg[Download, extract, and copy ffmpeg.exe]
+    DownFFmpeg -->|No| DownPiper{Is Piper missing?}
+    
+    InstallFFmpeg --> DownPiper
+    DownPiper -->|Yes| InstallPiper[Download, extract, and copy piper.exe]
+    DownPiper -->|No| DownWhisper{Is Whisper missing?}
+    
+    InstallPiper --> DownWhisper
+    DownWhisper -->|Yes| InstallWhisper[Download, extract, and copy whisper-cli.exe]
+    DownWhisper -->|No| DownModels{Are default models/voices missing?}
+    
+    InstallWhisper --> DownModels
+    DownModels -->|Yes| InstallModels[Download default ggml-base.bin and default voice model]
+    DownModels -->|No| SaveMetadata[Update local package.json with downloaded versions/URLs]
+    
+    InstallModels --> SaveMetadata
+    SaveMetadata --> HideOverlay[Hide Fullscreen Download Overlay]
+    HideOverlay --> PopulateLists
+    
+    PopulateLists --> Ready([SpeechBoleh Ready & Dashboard Active])
+```
 
 ---
 

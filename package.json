@@ -60,11 +60,11 @@
     },
     "piper": {
       "url": "https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_windows_amd64.zip",
-      "version": "latest"
+      "version": "2023.11.14-2"
     },
     "whisper": {
       "url": "https://github.com/ggml-org/whisper.cpp/releases/download/v1.9.1/whisper-bin-x64.zip",
-      "version": "latest"
+      "version": "1.9.1"
     }
   }
 }
