@@ -35,6 +35,22 @@ function getAssetPath(...parts) {
   return path.join(base, ...parts);
 }
 
+// Helper to get component config from local package.json
+function getLocalComponentConfig(component) {
+  try {
+    const pkgPath = path.join(__dirname, 'package.json');
+    if (fs.existsSync(pkgPath)) {
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+      if (pkg.pkg && pkg.pkg[component]) {
+        return pkg.pkg[component];
+      }
+    }
+  } catch (e) {
+    console.error(`[getLocalComponentConfig] Error reading package.json for ${component}:`, e);
+  }
+  return null;
+}
+
 // Ensure temp directory exists inside writable user data if packaged
 const tmpDir = app.isPackaged 
   ? path.join(app.getPath('userData'), 'tmp') 
@@ -1024,8 +1040,9 @@ ipcMain.handle('download-ffmpeg', async (event, customUrl, customVersion) => {
   const ffmpegTargetDir = getAssetPath('bin', 'ffmpeg', 'bin');
   const ffmpegFinalPath = path.join(ffmpegTargetDir, 'ffmpeg.exe');
 
-  // URL for latest stable essentials build from gyan.dev, with a reliable fallback GitHub release mirror
-  const ffmpegUrl = 'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip';
+  // Load default URL from local package.json if available
+  const pkgConfig = getLocalComponentConfig('ffmpeg');
+  const ffmpegUrl = pkgConfig ? pkgConfig.url : 'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip';
   const ffmpegFallbackUrl = 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip';
 
   let backedUp = false;
@@ -1216,7 +1233,9 @@ ipcMain.handle('download-piper', async (event, customUrl, customVersion) => {
   const piperTargetDirBak = piperTargetDir + '_bak';
   const piperZipDest = path.join(tmpDir, 'piper.zip');
   const piperFinalExe = path.join(piperTargetDir, 'piper', 'piper.exe');
-  const url = 'https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_windows_amd64.zip';
+  // Load default URL from local package.json if available
+  const pkgConfig = getLocalComponentConfig('piper');
+  const url = pkgConfig ? pkgConfig.url : 'https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_windows_amd64.zip';
 
   let backedUp = false;
 
@@ -1306,7 +1325,9 @@ ipcMain.handle('download-whisper-engine', async (event, customUrl, customVersion
   const whisperZipDest = path.join(tmpDir, 'whisper.zip');
   const whisperTargetDir = getAssetPath('bin', 'whisper', 'Release');
   const whisperFinalExe = path.join(whisperTargetDir, 'whisper-cli.exe');
-  const url = 'https://github.com/ggml-org/whisper.cpp/releases/download/v1.9.1/whisper-bin-x64.zip';
+  // Load default URL from local package.json if available
+  const pkgConfig = getLocalComponentConfig('whisper');
+  const url = pkgConfig ? pkgConfig.url : 'https://github.com/ggml-org/whisper.cpp/releases/download/v1.9.1/whisper-bin-x64.zip';
 
   let backedUp = false;
 
