@@ -186,8 +186,12 @@ flowchart TD
     CheckDeps -->|Yes| PopulateLists[Scan & load local mics, voices, and Whisper models]
     CheckDeps -->|No| ShowOverlay[Display Fullscreen Download Overlay]
     
-    ShowOverlay --> ResolveUrls[Query Online raw package.json for download URLs]
-    ResolveUrls --> DownFFmpeg{Is FFmpeg missing?}
+    ShowOverlay --> CheckLocalVersion{Is local version NULL/undefined?}
+    CheckLocalVersion -->|Yes| UseLocalUrl[Bypass online query. Use local package.json URLs]
+    CheckLocalVersion -->|No| ResolveUrls[Query Online raw package.json for download URLs]
+    
+    UseLocalUrl --> DownFFmpeg{Is FFmpeg missing?}
+    ResolveUrls --> DownFFmpeg
     DownFFmpeg -->|Yes| InstallFFmpeg[Download, extract, and copy ffmpeg.exe]
     DownFFmpeg -->|No| DownPiper{Is Piper missing?}
     

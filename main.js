@@ -80,6 +80,19 @@ function getComponentsConfigPath() {
 
 // Helper to resolve the best URL and version for a component (tries online package.json first, falls back to local config)
 async function getComponentDownloadUrl(component, defaultFallbackUrl, defaultFallbackVersion = 'latest') {
+  const localConfig = getLocalComponentConfig(component);
+  const localVersion = localConfig ? localConfig.version : null;
+
+  // If local version is null, undefined, or the string "null" / "NULL", do NOT query the online version.
+  // Use the local package.json configuration directly.
+  const localVerStr = localVersion !== null && localVersion !== undefined ? String(localVersion).trim().toLowerCase() : null;
+  if (localVersion === null || localVersion === undefined || localVerStr === 'null' || localVerStr === '') {
+    const localUrl = localConfig && localConfig.url ? localConfig.url : defaultFallbackUrl;
+    const fallbackVer = localVersion || defaultFallbackVersion;
+    console.log(`[getComponentDownloadUrl] Local version for ${component} is NULL/undefined. Bypassing online lookup. Using local URL: ${localUrl}`);
+    return { url: localUrl, version: fallbackVer, source: 'local' };
+  }
+
   try {
     // Try fetching online package.json with a timeout
     const controller = new AbortController();
@@ -102,12 +115,11 @@ async function getComponentDownloadUrl(component, defaultFallbackUrl, defaultFal
   }
 
   // Fall back to local package.json
-  const localConfig = getLocalComponentConfig(component);
   if (localConfig && localConfig.url) {
     const localUrl = localConfig.url;
-    const localVersion = localConfig.version || 'latest';
+    const localVersionVal = localConfig.version || 'latest';
     console.log(`[getComponentDownloadUrl] Resolved local package.json URL for ${component}: ${localUrl}`);
-    return { url: localUrl, version: localVersion, source: 'local' };
+    return { url: localUrl, version: localVersionVal, source: 'local' };
   }
 
   console.log(`[getComponentDownloadUrl] Resolved default fallback URL for ${component}: ${defaultFallbackUrl}`);
