@@ -688,14 +688,57 @@ function updateLocalPackageJson(component, url, version) {
 
 // Helper: Check if remote version is larger than local version
 function isVersionNewer(local, remote) {
-  const localParts = String(local).split('-')[0].split('.').map(Number);
-  const remoteParts = String(remote).split('-')[0].split('.').map(Number);
-  for (let i = 0; i < 3; i++) {
+  const localClean = String(local).split('-')[0];
+  const remoteClean = String(remote).split('-')[0];
+
+  // If either is not standard numeric dot-separated format, treat as plain text strings
+  const hasLocalNumbers = localClean.split('.').length > 0 && localClean.split('.').every(x => x.trim() !== '' && !isNaN(Number(x)));
+  const hasRemoteNumbers = remoteClean.split('.').length > 0 && remoteClean.split('.').every(x => x.trim() !== '' && !isNaN(Number(x)));
+
+  if (!hasLocalNumbers || !hasRemoteNumbers) {
+    // If they are identical text strings, no update is needed.
+    if (String(local).trim().toLowerCase() === String(remote).trim().toLowerCase()) {
+      return false;
+    }
+    // If they are different text strings, flag update required (return true)
+    return true;
+  }
+
+  // 1. Compare core semantic version parts (e.g. 2023.11.14)
+  const localParts = localClean.split('.').map(Number);
+  const remoteParts = remoteClean.split('.').map(Number);
+  for (let i = 0; i < Math.max(localParts.length, remoteParts.length); i++) {
     const localPart = localParts[i] || 0;
     const remotePart = remoteParts[i] || 0;
     if (remotePart > localPart) return true;
     if (localPart > remotePart) return false;
   }
+  
+  // 2. If core versions are identical, compare build tags after '-' if they exist
+  const localSplit = String(local).split('-');
+  const remoteSplit = String(remote).split('-');
+  
+  const localSuffix = localSplit[1];
+  const remoteSuffix = remoteSplit[1];
+  
+  if (localSuffix !== undefined && remoteSuffix !== undefined) {
+    if (localSuffix.trim().toLowerCase() === remoteSuffix.trim().toLowerCase()) {
+      return false;
+    }
+    const localNum = Number(localSuffix);
+    const remoteNum = Number(remoteSuffix);
+    if (!isNaN(localNum) && !isNaN(remoteNum)) {
+      return remoteNum > localNum;
+    }
+    // Suffixes are text strings and they differ: flag update required
+    return true;
+  }
+  
+  // If remote has a suffix but local doesn't, remote is newer (e.g. 2023.11.14-1 > 2023.11.14)
+  if (localSuffix === undefined && remoteSuffix !== undefined) {
+    return true;
+  }
+  
   return false;
 }
 
