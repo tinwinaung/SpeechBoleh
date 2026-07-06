@@ -102,9 +102,6 @@ npm run dist
 * **ONNX Runtime (Embedded)**: Loaded via Piper to process ONNX-based voice models (`en_US-lessac-medium.onnx`, `en_US-joe-medium.onnx`, `en_US-ryan-medium.onnx`).
 * **Hugging Face Downloader**: Downloads voice models (`.onnx` and `.json` configs) dynamically to your offline cache directory.
 
-### Resources
-Please read external resources [here](bin/readme.md)
----
 
 ## 📁 Project Architecture & Components
 

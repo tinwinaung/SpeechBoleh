@@ -24,7 +24,14 @@ let activeModel = 'ggml-base.bin';
 
 // Helper to resolve paths to binaries/assets, handling ASAR unpacking automatically
 function getAssetPath(...parts) {
-  const base = __dirname.replace('app.asar', 'app.asar.unpacked');
+  let base;
+  if (process.env.PORTABLE_EXECUTABLE_DIR) {
+    // Packaged Portable application: locate binaries next to the portable executable on host system
+    base = process.env.PORTABLE_EXECUTABLE_DIR;
+  } else {
+    // Installed application or Development mode: locate inside resources or project directory
+    base = __dirname.replace('app.asar', 'app.asar.unpacked');
+  }
   return path.join(base, ...parts);
 }
 
