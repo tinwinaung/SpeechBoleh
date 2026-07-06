@@ -609,6 +609,24 @@ ipcMain.handle('delete-file', async (event, filePath) => {
   }
 });
 
+// Helper: Update a component's config in the local package.json file
+function updateLocalPackageJson(component, url, version) {
+  try {
+    const pkgPath = path.join(__dirname, 'package.json');
+    if (fs.existsSync(pkgPath)) {
+      const data = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+      if (!data.pkg) data.pkg = {};
+      if (!data.pkg[component]) data.pkg[component] = {};
+      data.pkg[component].url = url;
+      data.pkg[component].version = version;
+      fs.writeFileSync(pkgPath, JSON.stringify(data, null, 2), 'utf8');
+      console.log(`[package.json] Dynamic update successful for ${component} to version ${version}`);
+    }
+  } catch (err) {
+    console.error(`[package.json] Dynamic update failed for ${component}:`, err);
+  }
+}
+
 // Helper: Check if remote version is larger than local version
 function isVersionNewer(local, remote) {
   const localParts = String(local).split('-')[0].split('.').map(Number);
@@ -625,7 +643,38 @@ function isVersionNewer(local, remote) {
 // IPC: Check for updates online from GitHub package.json
 ipcMain.handle('check-for-updates', async () => {
   const localVersion = app.getVersion();
+  
+  // 1. Get binary presence statuses
+  const localFfmpeg = getAssetPath('bin', 'ffmpeg', 'bin', 'ffmpeg.exe');
+  const piperExe = getAssetPath('bin', 'piper', 'piper', 'piper.exe');
+  const whisperCli = getAssetPath('bin', 'whisper', 'Release', 'whisper-cli.exe');
+  
+  const ffmpegInstalled = fs.existsSync(localFfmpeg);
+  const piperInstalled = fs.existsSync(piperExe);
+  const whisperInstalled = fs.existsSync(whisperCli);
+
+  // 2. Read local package.json config
+  let localPkg = { pkg: {} };
   try {
+    const pkgPath = path.join(__dirname, 'package.json');
+    if (fs.existsSync(pkgPath)) {
+      localPkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+    }
+  } catch (err) {
+    console.error('Failed to read local package.json:', err);
+  }
+
+  const getLocalComponentVersion = (name, installed) => {
+    if (!installed) return 'Not Installed';
+    return (localPkg.pkg && localPkg.pkg[name] && localPkg.pkg[name].version) || 'latest';
+  };
+
+  const ffmpegLocalVersion = getLocalComponentVersion('ffmpeg', ffmpegInstalled);
+  const piperLocalVersion = getLocalComponentVersion('piper', piperInstalled);
+  const whisperLocalVersion = getLocalComponentVersion('whisper', whisperInstalled);
+
+  try {
+    // 3. Fetch remote package.json
     const response = await fetch('https://raw.githubusercontent.com/tinwinaung/SpeechBoleh/main/package.json');
     if (!response.ok) {
       throw new Error(`Failed to fetch online package.json (status ${response.status})`);
@@ -636,41 +685,59 @@ ipcMain.handle('check-for-updates', async () => {
       throw new Error('Version field not found in remote package.json');
     }
 
-    const updateAvailable = isVersionNewer(localVersion, remoteVersion);
+    const appUpdateAvailable = isVersionNewer(localVersion, remoteVersion);
 
-    if (updateAvailable) {
-      const choice = dialog.showMessageBoxSync(mainWindow, {
-        type: 'question',
-        buttons: ['Yes', 'No'],
-        defaultId: 0,
-        title: 'Update Available',
-        message: `A new version of SpeechBoleh is available online.\n\nCurrent Version: v${localVersion}\nLatest Version: v${remoteVersion}\n\nWould you like to go to the release page?`,
-        cancelId: 1
-      });
-
-      if (choice === 0) {
-        shell.openExternal('https://github.com/tinwinaung/SpeechBoleh/releases');
+    // 4. Get remote component configs
+    const getRemoteComponentData = (name, localVer) => {
+      const remoteData = (data.pkg && data.pkg[name]) || { version: 'latest', url: '' };
+      const remoteVer = remoteData.version || 'latest';
+      const url = remoteData.url || '';
+      
+      // If local is not installed, it needs update/install
+      let updateAvailable = false;
+      if (localVer === 'Not Installed') {
+        updateAvailable = true;
+      } else if (localVer !== remoteVer) {
+        updateAvailable = true;
       }
-      return { success: true, updateAvailable: true, currentVersion: localVersion, latestVersion: remoteVersion };
-    } else {
-      dialog.showMessageBoxSync(mainWindow, {
-        type: 'info',
-        buttons: ['OK'],
-        defaultId: 0,
-        title: 'Up to Date',
-        message: `SpeechBoleh is up to date.\n\nCurrent Version: v${localVersion}`
-      });
-      return { success: true, updateAvailable: false, currentVersion: localVersion, latestVersion: remoteVersion };
-    }
+
+      return {
+        local: localVer,
+        remote: remoteVer,
+        updateAvailable,
+        url
+      };
+    };
+
+    const result = {
+      success: true,
+      components: {
+        app: {
+          local: localVersion,
+          remote: remoteVersion,
+          updateAvailable: appUpdateAvailable,
+          url: 'https://github.com/tinwinaung/SpeechBoleh/releases'
+        },
+        ffmpeg: getRemoteComponentData('ffmpeg', ffmpegLocalVersion),
+        piper: getRemoteComponentData('piper', piperLocalVersion),
+        whisper: getRemoteComponentData('whisper', whisperLocalVersion)
+      }
+    };
+
+    return result;
   } catch (err) {
     console.error('[Update Check Error]', err);
-    dialog.showMessageBoxSync(mainWindow, {
-      type: 'error',
-      buttons: ['OK'],
-      defaultId: 0,
-      title: 'Update Check Failed',
-      message: `Failed to check for updates:\n${err.message}\n\nPlease check your internet connection and try again.`
-    });
+    return { success: false, error: err.message };
+  }
+});
+
+// IPC: Open external link in default browser
+ipcMain.handle('open-external-url', async (event, url) => {
+  try {
+    shell.openExternal(url);
+    return { success: true };
+  } catch (err) {
+    console.error('Failed to open external URL:', err);
     return { success: false, error: err.message };
   }
 });
@@ -918,7 +985,7 @@ ipcMain.handle('download-voice-model', async (event, voiceName) => {
 });
 
 // IPC: Download latest FFmpeg build from gyan.dev
-ipcMain.handle('download-ffmpeg', async (event) => {
+ipcMain.handle('download-ffmpeg', async (event, customUrl, customVersion) => {
   const ffmpegBaseDir = getAssetPath('bin', 'ffmpeg');
   const ffmpegBaseDirBak = ffmpegBaseDir + '_bak';
   const ffmpegZipDest = path.join(tmpDir, 'ffmpeg.zip');
@@ -959,11 +1026,15 @@ ipcMain.handle('download-ffmpeg', async (event) => {
 
     // 5. Download the zip file with primary/fallback try-catch
     try {
-      await downloadUrlToFile(ffmpegUrl, ffmpegZipDest, (downloaded, total) => {
+      const downloadLink = customUrl || ffmpegUrl;
+      await downloadUrlToFile(downloadLink, ffmpegZipDest, (downloaded, total) => {
         const percentage = total ? Math.round((downloaded / total) * 100) : 0;
         sendStatus(`Downloading FFmpeg archive: ${percentage}%`, percentage);
       });
     } catch (primaryErr) {
+      if (customUrl) {
+        throw primaryErr; // Propagate error for specific custom URL downloads
+      }
       console.warn('[FFmpeg Downloader] Primary download link refused connection. Attempting backup mirror...', primaryErr);
       sendStatus('Primary mirror connection refused. Accessing backup download mirror (approx. 100MB)...', 0);
       
@@ -1014,6 +1085,9 @@ ipcMain.handle('download-ffmpeg', async (event) => {
       }
       // Re-configure FFmpeg path globally for fluent-ffmpeg now that it exists locally
       configureFfmpeg();
+      if (customUrl && customVersion) {
+        updateLocalPackageJson('ffmpeg', customUrl, customVersion);
+      }
       return { success: true, path: ffmpegFinalPath };
     } else {
       throw new Error('Failed to copy ffmpeg.exe to destination.');
@@ -1088,7 +1162,7 @@ function copyFilesWithExtension(srcDir, destDir, extensions) {
 }
 
 // IPC: Download Piper Engine (C++ build)
-ipcMain.handle('download-piper', async (event) => {
+ipcMain.handle('download-piper', async (event, customUrl, customVersion) => {
   const piperTargetDir = getAssetPath('bin', 'piper');
   const piperTargetDirBak = piperTargetDir + '_bak';
   const piperZipDest = path.join(tmpDir, 'piper.zip');
@@ -1114,7 +1188,8 @@ ipcMain.handle('download-piper', async (event) => {
     if (!fs.existsSync(piperTargetDir)) fs.mkdirSync(piperTargetDir, { recursive: true });
 
     sendStatus('Downloading Piper Neural TTS Engine (approx. 22MB)...', 0);
-    await downloadUrlToFile(url, piperZipDest, (downloaded, total) => {
+    const downloadLink = customUrl || url;
+    await downloadUrlToFile(downloadLink, piperZipDest, (downloaded, total) => {
       const percentage = total ? Math.round((downloaded / total) * 100) : 0;
       sendStatus(`Downloading Piper: ${percentage}%`, percentage);
     });
@@ -1141,6 +1216,9 @@ ipcMain.handle('download-piper', async (event) => {
       // Delete backup folder now that installation succeeded
       if (backedUp && fs.existsSync(piperTargetDirBak)) {
         fs.rmSync(piperTargetDirBak, { recursive: true, force: true });
+      }
+      if (customUrl && customVersion) {
+        updateLocalPackageJson('piper', customUrl, customVersion);
       }
       return { success: true, path: piperFinalExe };
     } else {
@@ -1173,7 +1251,7 @@ ipcMain.handle('download-piper', async (event) => {
 });
 
 // IPC: Download Whisper.cpp Engine (C++ build)
-ipcMain.handle('download-whisper-engine', async (event) => {
+ipcMain.handle('download-whisper-engine', async (event, customUrl, customVersion) => {
   const whisperBaseDir = getAssetPath('bin', 'whisper');
   const whisperBaseDirBak = whisperBaseDir + '_bak';
   const whisperZipDest = path.join(tmpDir, 'whisper.zip');
@@ -1200,7 +1278,8 @@ ipcMain.handle('download-whisper-engine', async (event) => {
     if (!fs.existsSync(whisperTargetDir)) fs.mkdirSync(whisperTargetDir, { recursive: true });
 
     sendStatus('Downloading Whisper.cpp Engine (approx. 8MB)...', 0);
-    await downloadUrlToFile(url, whisperZipDest, (downloaded, total) => {
+    const downloadLink = customUrl || url;
+    await downloadUrlToFile(downloadLink, whisperZipDest, (downloaded, total) => {
       const percentage = total ? Math.round((downloaded / total) * 100) : 0;
       sendStatus(`Downloading Whisper: ${percentage}%`, percentage);
     });
@@ -1266,6 +1345,9 @@ ipcMain.handle('download-whisper-engine', async (event) => {
       // Delete backup folder now that installation succeeded
       if (backedUp && fs.existsSync(whisperBaseDirBak)) {
         fs.rmSync(whisperBaseDirBak, { recursive: true, force: true });
+      }
+      if (customUrl && customVersion) {
+        updateLocalPackageJson('whisper', customUrl, customVersion);
       }
       return { success: true, path: whisperFinalExe };
     } else {

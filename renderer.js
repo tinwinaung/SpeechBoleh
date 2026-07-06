@@ -439,12 +439,14 @@ async function populateMics() {
   }
 }
 
-async function triggerFfmpegDownloadFlow() {
+async function triggerFfmpegDownloadFlow(customUrl, customVersion) {
   console.log('[DEBUG] triggerFfmpegDownloadFlow clicked');
-  const choice = confirm("This action will download and extract the latest FFmpeg Essentials build (approx. 90MB) from gyan.dev directly into your bin/ folder.\n\nAre you sure you want to download and install FFmpeg now?");
-  if (!choice) {
-    console.log('[DEBUG] User cancelled FFmpeg download prompt');
-    return;
+  if (!customUrl) {
+    const choice = confirm("This action will download and extract the latest FFmpeg Essentials build (approx. 90MB) from gyan.dev directly into your bin/ folder.\n\nAre you sure you want to download and install FFmpeg now?");
+    if (!choice) {
+      console.log('[DEBUG] User cancelled FFmpeg download prompt');
+      return;
+    }
   }
 
   logStatus("Starting FFmpeg download & installation process...", "system");
@@ -464,7 +466,7 @@ async function triggerFfmpegDownloadFlow() {
   modelDownloadOverlay.style.setProperty('display', 'flex', 'important');
 
   try {
-    const res = await window.api.downloadFfmpeg();
+    const res = await window.api.downloadFfmpeg(customUrl, customVersion);
     if (res.success) {
       logStatus(`FFmpeg configured successfully at: ${res.path}`, "success");
       alert(`FFmpeg downloaded and configured successfully!`);
@@ -482,12 +484,14 @@ async function triggerFfmpegDownloadFlow() {
   }
 }
 
-async function triggerPiperDownloadFlow() {
+async function triggerPiperDownloadFlow(customUrl, customVersion) {
   console.log('[DEBUG] triggerPiperDownloadFlow clicked');
-  const choice = confirm("This action will download and extract the latest prebuilt Piper TTS Engine (approx. 22MB) from GitHub directly into your bin/ folder.\n\nAre you sure you want to download and install the Piper Engine now?");
-  if (!choice) {
-    console.log('[DEBUG] User cancelled Piper download prompt');
-    return;
+  if (!customUrl) {
+    const choice = confirm("This action will download and extract the latest prebuilt Piper TTS Engine (approx. 22MB) from GitHub directly into your bin/ folder.\n\nAre you sure you want to download and install the Piper Engine now?");
+    if (!choice) {
+      console.log('[DEBUG] User cancelled Piper download prompt');
+      return;
+    }
   }
 
   logStatus("Starting Piper engine download & installation...", "system");
@@ -504,7 +508,7 @@ async function triggerPiperDownloadFlow() {
   modelDownloadOverlay.style.setProperty('display', 'flex', 'important');
 
   try {
-    const res = await window.api.downloadPiper();
+    const res = await window.api.downloadPiper(customUrl, customVersion);
     if (res.success) {
       logStatus(`Piper engine configured successfully at: ${res.path}`, "success");
       alert(`Piper engine downloaded and configured successfully!`);
@@ -524,12 +528,14 @@ async function triggerPiperDownloadFlow() {
   }
 }
 
-async function triggerWhisperDownloadFlow() {
+async function triggerWhisperDownloadFlow(customUrl, customVersion) {
   console.log('[DEBUG] triggerWhisperDownloadFlow clicked');
-  const choice = confirm("This action will download and extract the prebuilt Whisper.cpp CPU Engine (approx. 8MB) from GitHub directly into your bin/ folder.\n\nAre you sure you want to download and install the Whisper.cpp Engine now?");
-  if (!choice) {
-    console.log('[DEBUG] User cancelled Whisper download prompt');
-    return;
+  if (!customUrl) {
+    const choice = confirm("This action will download and extract the prebuilt Whisper.cpp CPU Engine (approx. 8MB) from GitHub directly into your bin/ folder.\n\nAre you sure you want to download and install the Whisper.cpp Engine now?");
+    if (!choice) {
+      console.log('[DEBUG] User cancelled Whisper download prompt');
+      return;
+    }
   }
 
   logStatus("Starting Whisper engine download & installation...", "system");
@@ -546,7 +552,7 @@ async function triggerWhisperDownloadFlow() {
   modelDownloadOverlay.style.setProperty('display', 'flex', 'important');
 
   try {
-    const res = await window.api.downloadWhisperEngine();
+    const res = await window.api.downloadWhisperEngine(customUrl, customVersion);
     if (res.success) {
       logStatus(`Whisper engine configured successfully at: ${res.path}`, "success");
       alert(`Whisper.cpp engine downloaded and configured successfully!`);
@@ -572,18 +578,117 @@ async function triggerCheckUpdateFlow() {
   btnCheckUpdate.classList.add('disabled');
   try {
     const res = await window.api.checkForUpdates();
-    if (res.success) {
-      if (res.updateAvailable) {
-        logStatus(`Update available: v${res.latestVersion} (current: v${res.currentVersion})`, "warning");
-      } else {
-        logStatus(`SpeechBoleh is up to date (v${res.currentVersion}).`, "success");
-      }
-    } else {
-      throw new Error(res.error || "Failed to check for updates");
+    if (!res.success) {
+      throw new Error(res.error || "Failed to query update statuses");
     }
+
+    logStatus("Update check completed. Rendering component statuses...", "success");
+
+    const listContainer = document.getElementById('update-components-list');
+    if (!listContainer) return;
+
+    listContainer.innerHTML = '';
+
+    const componentKeys = ['app', 'ffmpeg', 'piper', 'whisper'];
+    const componentDetails = {
+      app: { name: 'SpeechBoleh (App)', icon: 'bi-soundwave', color: 'text-cyan' },
+      ffmpeg: { name: 'FFmpeg Core', icon: 'bi-file-earmark-zip', color: 'text-cyan' },
+      piper: { name: 'Piper TTS Engine', icon: 'bi-soundwave', color: 'text-purple' },
+      whisper: { name: 'Whisper STT Engine', icon: 'bi-translate', color: 'text-cyan' }
+    };
+
+    componentKeys.forEach(key => {
+      const data = res.components[key];
+      const details = componentDetails[key];
+
+      const itemDiv = document.createElement('div');
+      itemDiv.className = 'p-3 bg-dark bg-opacity-50 border border-secondary border-opacity-15 rounded-3 d-flex align-items-center justify-content-between';
+
+      // Badge details & action button
+      let statusBadgeHtml = '';
+      let actionBtnHtml = '';
+
+      if (key === 'app') {
+        if (data.updateAvailable) {
+          statusBadgeHtml = `<span class="badge bg-warning bg-opacity-20 text-warning border border-warning border-opacity-20 px-2.5 py-1.5 rounded-pill"><i class="bi bi-exclamation-triangle-fill me-1"></i>Update Available</span>`;
+          actionBtnHtml = `<button class="btn btn-cyan btn-sm py-1 px-3 rounded-pill" style="font-size: 0.7rem;" id="btn-update-app"><i class="bi bi-box-arrow-up-right me-1"></i>Releases</button>`;
+        } else {
+          statusBadgeHtml = `<span class="badge bg-success bg-opacity-20 text-success border border-success border-opacity-20 px-2.5 py-1.5 rounded-pill"><i class="bi bi-shield-fill-check me-1"></i>Up to Date</span>`;
+          actionBtnHtml = `<button class="btn btn-outline-secondary btn-sm py-1 px-3 rounded-pill disabled" style="font-size: 0.7rem;"><i class="bi bi-check-lg me-1"></i>Latest</button>`;
+        }
+      } else {
+        if (data.local === 'Not Installed') {
+          statusBadgeHtml = `<span class="badge bg-danger bg-opacity-20 text-danger border border-danger border-opacity-20 px-2.5 py-1.5 rounded-pill"><i class="bi bi-exclamation-octagon-fill me-1"></i>Not Installed</span>`;
+          actionBtnHtml = `<button class="btn btn-cyan btn-sm py-1 px-3 rounded-pill action-install-btn" style="font-size: 0.7rem;" data-component="${key}" data-url="${data.url}" data-version="${data.remote}"><i class="bi bi-cloud-arrow-down-fill me-1"></i>Install</button>`;
+        } else if (data.updateAvailable) {
+          statusBadgeHtml = `<span class="badge bg-warning bg-opacity-20 text-warning border border-warning border-opacity-20 px-2.5 py-1.5 rounded-pill"><i class="bi bi-arrow-clockwise me-1"></i>Update Available</span>`;
+          actionBtnHtml = `<button class="btn btn-cyan btn-sm py-1 px-3 rounded-pill action-install-btn" style="font-size: 0.7rem;" data-component="${key}" data-url="${data.url}" data-version="${data.remote}"><i class="bi bi-arrow-down-circle-fill me-1"></i>Update</button>`;
+        } else {
+          statusBadgeHtml = `<span class="badge bg-success bg-opacity-20 text-success border border-success border-opacity-20 px-2.5 py-1.5 rounded-pill"><i class="bi bi-shield-fill-check me-1"></i>Installed</span>`;
+          actionBtnHtml = `<button class="btn btn-outline-secondary btn-sm py-1 px-3 rounded-pill action-install-btn" style="font-size: 0.7rem;" data-component="${key}" data-url="${data.url}" data-version="${data.remote}"><i class="bi bi-arrow-counterclockwise me-1"></i>Reinstall</button>`;
+        }
+      }
+
+      itemDiv.innerHTML = `
+        <div class="d-flex align-items-center gap-3">
+          <div class="rounded-circle p-2 bg-secondary bg-opacity-10 d-flex align-items-center justify-content-center" style="width: 38px; height: 38px;">
+            <i class="bi ${details.icon} ${details.color} fs-5"></i>
+          </div>
+          <div>
+            <h6 class="m-0 fw-bold text-white">${details.name}</h6>
+            <span class="small text-secondary" style="font-size: 0.7rem;">Local: <strong>${data.local}</strong> | Latest: <strong>${data.remote}</strong></span>
+          </div>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+          ${statusBadgeHtml}
+          ${actionBtnHtml}
+        </div>
+      `;
+
+      listContainer.appendChild(itemDiv);
+      
+      // Wire click for App Releases button if created
+      if (key === 'app' && data.updateAvailable) {
+        const updateAppBtn = itemDiv.querySelector('#btn-update-app');
+        if (updateAppBtn) {
+          updateAppBtn.addEventListener('click', () => {
+            window.api.openExternalUrl(data.url);
+          });
+        }
+      }
+    });
+
+    // Wire up events on dynamically generated install buttons
+    const updateModalEl = document.getElementById('updateModal');
+    const updateModal = bootstrap.Modal.getOrCreateInstance(updateModalEl);
+    
+    listContainer.querySelectorAll('.action-install-btn').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        const comp = btn.getAttribute('data-component');
+        const dlUrl = btn.getAttribute('data-url');
+        const dlVersion = btn.getAttribute('data-version');
+
+        console.log(`Triggering download for component: ${comp}, url: ${dlUrl}, version: ${dlVersion}`);
+        
+        // Close update modal first
+        updateModal.hide();
+
+        if (comp === 'ffmpeg') {
+          await triggerFfmpegDownloadFlow(dlUrl, dlVersion);
+        } else if (comp === 'piper') {
+          await triggerPiperDownloadFlow(dlUrl, dlVersion);
+        } else if (comp === 'whisper') {
+          await triggerWhisperDownloadFlow(dlUrl, dlVersion);
+        }
+      });
+    });
+
+    updateModal.show();
+
   } catch (err) {
     console.error("Update check failed:", err);
     logStatus(`Update Check Error: ${err.message}`, "error");
+    alert(`Failed to check for updates:\n${err.message}`);
   } finally {
     btnCheckUpdate.classList.remove('disabled');
   }

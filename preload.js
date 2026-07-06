@@ -106,7 +106,7 @@ contextBridge.exposeInMainWorld('api', {
    * Trigger FFmpeg download from backend
    * @returns {Promise<{success: boolean, path?: string, error?: string}>}
    */
-  downloadFfmpeg: () => ipcRenderer.invoke('download-ffmpeg'),
+  downloadFfmpeg: (url, version) => ipcRenderer.invoke('download-ffmpeg', url, version),
 
   /**
    * Event listener for FFmpeg download progress
@@ -124,7 +124,7 @@ contextBridge.exposeInMainWorld('api', {
    * Trigger Piper engine download from backend
    * @returns {Promise<{success: boolean, path?: string, error?: string}>}
    */
-  downloadPiper: () => ipcRenderer.invoke('download-piper'),
+  downloadPiper: (url, version) => ipcRenderer.invoke('download-piper', url, version),
 
   /**
    * Event listener for Piper download progress
@@ -142,7 +142,7 @@ contextBridge.exposeInMainWorld('api', {
    * Trigger Whisper engine download from backend
    * @returns {Promise<{success: boolean, path?: string, error?: string}>}
    */
-  downloadWhisperEngine: () => ipcRenderer.invoke('download-whisper-engine'),
+  downloadWhisperEngine: (url, version) => ipcRenderer.invoke('download-whisper-engine', url, version),
 
   /**
    * Event listener for Whisper download progress
@@ -165,5 +165,6 @@ contextBridge.exposeInMainWorld('api', {
   onWindowMaximizedState: (callback) => ipcRenderer.on('window-maximized-state', (event, isMaximized) => callback(isMaximized)),
   checkDependencies: () => ipcRenderer.invoke('check-dependencies'),
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
-  getAppVersion: () => ipcRenderer.invoke('get-app-version')
+  getAppVersion: () => ipcRenderer.invoke('get-app-version'),
+  openExternalUrl: (url) => ipcRenderer.invoke('open-external-url', url)
 });
