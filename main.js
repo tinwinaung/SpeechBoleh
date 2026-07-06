@@ -831,6 +831,8 @@ ipcMain.handle('download-voice-model', async (event, voiceName) => {
 
 // IPC: Download latest FFmpeg build from gyan.dev
 ipcMain.handle('download-ffmpeg', async (event) => {
+  const ffmpegBaseDir = getAssetPath('bin', 'ffmpeg');
+  const ffmpegBaseDirBak = ffmpegBaseDir + '_bak';
   const ffmpegZipDest = path.join(tmpDir, 'ffmpeg.zip');
   const extractTempDir = path.join(tmpDir, 'ffmpeg_extracted');
   const ffmpegTargetDir = getAssetPath('bin', 'ffmpeg', 'bin');
@@ -840,12 +842,26 @@ ipcMain.handle('download-ffmpeg', async (event) => {
   const ffmpegUrl = 'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip';
   const ffmpegFallbackUrl = 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip';
 
+  let backedUp = false;
+
   try {
-    // 1. Ensure target directories exist
+    // 1. Ensure temp directory exists
     if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+
+    // 2. Perform backup of the existing folder
+    if (fs.existsSync(ffmpegBaseDir)) {
+      sendStatus('Backing up existing FFmpeg configuration...', 0);
+      if (fs.existsSync(ffmpegBaseDirBak)) {
+        fs.rmSync(ffmpegBaseDirBak, { recursive: true, force: true });
+      }
+      fs.renameSync(ffmpegBaseDir, ffmpegBaseDirBak);
+      backedUp = true;
+    }
+
+    // 3. Ensure target directory exists for new download
     if (!fs.existsSync(ffmpegTargetDir)) fs.mkdirSync(ffmpegTargetDir, { recursive: true });
 
-    // 2. Clean up any previous extraction directories
+    // 4. Clean up any previous extraction directories
     if (fs.existsSync(extractTempDir)) {
       fs.rmSync(extractTempDir, { recursive: true, force: true });
     }
@@ -853,7 +869,7 @@ ipcMain.handle('download-ffmpeg', async (event) => {
     // Send initial status update
     sendStatus('Downloading latest FFmpeg essentials release (approx. 90MB)...', 0);
 
-    // 3. Download the zip file with primary/fallback try-catch
+    // 5. Download the zip file with primary/fallback try-catch
     try {
       await downloadUrlToFile(ffmpegUrl, ffmpegZipDest, (downloaded, total) => {
         const percentage = total ? Math.round((downloaded / total) * 100) : 0;
@@ -869,7 +885,7 @@ ipcMain.handle('download-ffmpeg', async (event) => {
       });
     }
 
-    // 4. Extract the zip file using PowerShell Expand-Archive (native to Windows)
+    // 6. Extract the zip file using PowerShell Expand-Archive (native to Windows)
     sendStatus('Extracting zip archive using PowerShell...', 100);
     const extractCmd = `powershell -Command "Expand-Archive -Path '${ffmpegZipDest}' -DestinationPath '${extractTempDir}' -Force"`;
     
@@ -884,23 +900,27 @@ ipcMain.handle('download-ffmpeg', async (event) => {
       });
     });
 
-    // 5. Find ffmpeg.exe inside the extracted folder recursively
+    // 7. Find ffmpeg.exe inside the extracted folder recursively
     sendStatus('Searching for ffmpeg.exe in extracted folder...', 100);
     const foundExePath = findFileRecursively(extractTempDir, 'ffmpeg.exe');
     if (!foundExePath) {
       throw new Error('Could not locate ffmpeg.exe inside the extracted archive.');
     }
 
-    // 6. Copy ffmpeg.exe to final destination
+    // 8. Copy ffmpeg.exe to final destination
     sendStatus('Deploying executable to bin/ffmpeg/bin/...', 100);
     fs.copyFileSync(foundExePath, ffmpegFinalPath);
 
-    // 7. Verify file exists
+    // 9. Verify file exists
     if (fs.existsSync(ffmpegFinalPath)) {
       sendStatus('Cleaning up temporary setup files...', 100);
       try {
         if (fs.existsSync(ffmpegZipDest)) fs.unlinkSync(ffmpegZipDest);
         if (fs.existsSync(extractTempDir)) fs.rmSync(extractTempDir, { recursive: true, force: true });
+        // Delete backup folder now that installation succeeded
+        if (backedUp && fs.existsSync(ffmpegBaseDirBak)) {
+          fs.rmSync(ffmpegBaseDirBak, { recursive: true, force: true });
+        }
       } catch (cleanupErr) {
         console.warn('[FFmpeg Setup Cleanup Warning]', cleanupErr);
       }
@@ -913,6 +933,20 @@ ipcMain.handle('download-ffmpeg', async (event) => {
 
   } catch (error) {
     console.error('[FFmpeg Download/Setup Error]', error);
+    
+    // Rollback phase
+    if (backedUp && fs.existsSync(ffmpegBaseDirBak)) {
+      sendStatus('Installation failed. Restoring original FFmpeg backup...', 100);
+      try {
+        if (fs.existsSync(ffmpegBaseDir)) {
+          fs.rmSync(ffmpegBaseDir, { recursive: true, force: true });
+        }
+        fs.renameSync(ffmpegBaseDirBak, ffmpegBaseDir);
+      } catch (restoreErr) {
+        console.error('[FFmpeg Rollback Restore Error]', restoreErr);
+      }
+    }
+    
     return { success: false, error: error.message };
   }
 
@@ -939,15 +973,56 @@ function findFileRecursively(dir, fileName) {
   return null;
 }
 
+// Helper: Recursively find and copy files with specified extensions (for restoring models/voices)
+function copyFilesWithExtension(srcDir, destDir, extensions) {
+  if (!fs.existsSync(srcDir)) return;
+  if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
+
+  const files = fs.readdirSync(srcDir);
+  for (const file of files) {
+    const srcPath = path.join(srcDir, file);
+    const stat = fs.statSync(srcPath);
+    if (stat.isDirectory()) {
+      copyFilesWithExtension(srcPath, destDir, extensions);
+    } else {
+      const ext = path.extname(file).toLowerCase();
+      if (extensions.includes(ext)) {
+        const destPath = path.join(destDir, file);
+        try {
+          fs.copyFileSync(srcPath, destPath);
+          console.log(`[Backup Restore] Restored model/voice asset: ${file}`);
+        } catch (err) {
+          console.error(`[Backup Restore Error] Failed to restore asset ${file}:`, err);
+        }
+      }
+    }
+  }
+}
+
 // IPC: Download Piper Engine (C++ build)
 ipcMain.handle('download-piper', async (event) => {
-  const piperZipDest = path.join(tmpDir, 'piper.zip');
   const piperTargetDir = getAssetPath('bin', 'piper');
+  const piperTargetDirBak = piperTargetDir + '_bak';
+  const piperZipDest = path.join(tmpDir, 'piper.zip');
   const piperFinalExe = path.join(piperTargetDir, 'piper', 'piper.exe');
   const url = 'https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_windows_amd64.zip';
 
+  let backedUp = false;
+
   try {
     if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+
+    // 1. Perform backup of the existing folder
+    if (fs.existsSync(piperTargetDir)) {
+      sendStatus('Backing up existing Piper configuration...', 0);
+      if (fs.existsSync(piperTargetDirBak)) {
+        fs.rmSync(piperTargetDirBak, { recursive: true, force: true });
+      }
+      fs.renameSync(piperTargetDir, piperTargetDirBak);
+      backedUp = true;
+    }
+
+    // 2. Ensure target directory exists for new download
     if (!fs.existsSync(piperTargetDir)) fs.mkdirSync(piperTargetDir, { recursive: true });
 
     sendStatus('Downloading Piper Neural TTS Engine (approx. 22MB)...', 0);
@@ -966,14 +1041,39 @@ ipcMain.handle('download-piper', async (event) => {
     });
 
     if (fs.existsSync(piperFinalExe)) {
+      sendStatus('Restoring voice models from backup...', 100);
+      // Restore voice models (.onnx and .json) from backup folder to avoid redownloading them
+      if (backedUp && fs.existsSync(piperTargetDirBak)) {
+        const newVoiceDir = path.join(piperTargetDir, 'piper');
+        copyFilesWithExtension(piperTargetDirBak, newVoiceDir, ['.onnx', '.json']);
+      }
+
       sendStatus('Cleaning up temp files...', 100);
       if (fs.existsSync(piperZipDest)) fs.unlinkSync(piperZipDest);
+      // Delete backup folder now that installation succeeded
+      if (backedUp && fs.existsSync(piperTargetDirBak)) {
+        fs.rmSync(piperTargetDirBak, { recursive: true, force: true });
+      }
       return { success: true, path: piperFinalExe };
     } else {
       throw new Error('Failed to configure piper.exe at destination.');
     }
   } catch (error) {
     console.error('[Piper Engine Download Error]', error);
+    
+    // Rollback phase
+    if (backedUp && fs.existsSync(piperTargetDirBak)) {
+      sendStatus('Installation failed. Restoring original Piper backup...', 100);
+      try {
+        if (fs.existsSync(piperTargetDir)) {
+          fs.rmSync(piperTargetDir, { recursive: true, force: true });
+        }
+        fs.renameSync(piperTargetDirBak, piperTargetDir);
+      } catch (restoreErr) {
+        console.error('[Piper Rollback Restore Error]', restoreErr);
+      }
+    }
+    
     return { success: false, error: error.message };
   }
 
@@ -986,13 +1086,29 @@ ipcMain.handle('download-piper', async (event) => {
 
 // IPC: Download Whisper.cpp Engine (C++ build)
 ipcMain.handle('download-whisper-engine', async (event) => {
+  const whisperBaseDir = getAssetPath('bin', 'whisper');
+  const whisperBaseDirBak = whisperBaseDir + '_bak';
   const whisperZipDest = path.join(tmpDir, 'whisper.zip');
   const whisperTargetDir = getAssetPath('bin', 'whisper', 'Release');
   const whisperFinalExe = path.join(whisperTargetDir, 'whisper-cli.exe');
   const url = 'https://github.com/ggml-org/whisper.cpp/releases/download/v1.9.1/whisper-bin-x64.zip';
 
+  let backedUp = false;
+
   try {
     if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+
+    // 1. Perform backup of the existing folder
+    if (fs.existsSync(whisperBaseDir)) {
+      sendStatus('Backing up existing Whisper configuration...', 0);
+      if (fs.existsSync(whisperBaseDirBak)) {
+        fs.rmSync(whisperBaseDirBak, { recursive: true, force: true });
+      }
+      fs.renameSync(whisperBaseDir, whisperBaseDirBak);
+      backedUp = true;
+    }
+
+    // 2. Ensure target directory exists for new download
     if (!fs.existsSync(whisperTargetDir)) fs.mkdirSync(whisperTargetDir, { recursive: true });
 
     sendStatus('Downloading Whisper.cpp Engine (approx. 8MB)...', 0);
@@ -1050,14 +1166,39 @@ ipcMain.handle('download-whisper-engine', async (event) => {
     }
 
     if (fs.existsSync(whisperFinalExe)) {
+      sendStatus('Restoring Whisper models from backup...', 100);
+      // Restore whisper models (.bin) from backup folder to avoid redownloading them
+      if (backedUp && fs.existsSync(whisperBaseDirBak)) {
+        const newModelDir = path.join(whisperBaseDir, 'Release');
+        copyFilesWithExtension(whisperBaseDirBak, newModelDir, ['.bin']);
+      }
+
       sendStatus('Cleaning up temp files...', 100);
       if (fs.existsSync(whisperZipDest)) fs.unlinkSync(whisperZipDest);
+      // Delete backup folder now that installation succeeded
+      if (backedUp && fs.existsSync(whisperBaseDirBak)) {
+        fs.rmSync(whisperBaseDirBak, { recursive: true, force: true });
+      }
       return { success: true, path: whisperFinalExe };
     } else {
       throw new Error('Failed to configure whisper-cli.exe at destination.');
     }
   } catch (error) {
     console.error('[Whisper Engine Download Error]', error);
+    
+    // Rollback phase
+    if (backedUp && fs.existsSync(whisperBaseDirBak)) {
+      sendStatus('Installation failed. Restoring original Whisper backup...', 100);
+      try {
+        if (fs.existsSync(whisperBaseDir)) {
+          fs.rmSync(whisperBaseDir, { recursive: true, force: true });
+        }
+        fs.renameSync(whisperBaseDirBak, whisperBaseDir);
+      } catch (restoreErr) {
+        console.error('[Whisper Rollback Restore Error]', restoreErr);
+      }
+    }
+    
     return { success: false, error: error.message };
   }
 

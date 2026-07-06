@@ -160,8 +160,7 @@ async function checkAndSetupFirstRun() {
     logStatus('First-run dependencies missing. Launching automatic setup...', 'warning');
 
     // Show download overlay dialog modal
-    modelDownloadOverlay.style.display = 'flex';
-    modelDownloadOverlay.classList.remove('d-none');
+    modelDownloadOverlay.style.setProperty('display', 'flex', 'important');
 
     const descEl = modelDownloadOverlay.querySelector('p');
     const originalDesc = descEl ? descEl.innerText : '';
@@ -277,8 +276,7 @@ async function checkAndSetupFirstRun() {
     alert(`First-run setup failed:\n${err.message}\n\nYou can retry downloading missing modules manually from the "Download Engines" menu.`);
   } finally {
     // Hide overlay and restore default texts
-    modelDownloadOverlay.style.display = 'none';
-    modelDownloadOverlay.classList.add('d-none');
+    modelDownloadOverlay.style.setProperty('display', 'none', 'important');
 
     // Reset overlay titles to standard models
     downloadTitle.innerText = "Downloading Model";
@@ -354,7 +352,7 @@ async function handleVoiceChange() {
 
   if (!isDownloaded) {
     // Show download UI (reusing modelDownloadOverlay)
-    modelDownloadOverlay.style.display = 'flex';
+    modelDownloadOverlay.style.setProperty('display', 'flex', 'important');
     downloadTitle.innerText = `Downloading Voice Model`;
     downloadProgressBar.style.width = '0%';
     downloadBytes.innerText = '0 / 0 MB';
@@ -387,7 +385,7 @@ async function handleVoiceChange() {
       voiceSelect.value = 'en_US-lessac-medium.onnx';
       return;
     } finally {
-      modelDownloadOverlay.style.display = 'none';
+      modelDownloadOverlay.style.setProperty('display', 'none', 'important');
     }
   }
 }
@@ -427,18 +425,17 @@ async function populateMics() {
 }
 
 async function triggerFfmpegDownloadFlow() {
-  const deps = await window.api.checkDependencies();
-  if (deps.ffmpeg) {
-    //alert("FFmpeg is already downloaded and configured in your bin folder!");
+  console.log('[DEBUG] triggerFfmpegDownloadFlow clicked');
+  const choice = confirm("This action will download and extract the latest FFmpeg Essentials build (approx. 90MB) from gyan.dev directly into your bin/ folder.\n\nAre you sure you want to download and install FFmpeg now?");
+  if (!choice) {
+    console.log('[DEBUG] User cancelled FFmpeg download prompt');
     return;
   }
-
-  const choice = confirm("This action will download and extract the latest FFmpeg Essentials build (approx. 90MB) from gyan.dev directly into your bin/ folder.\n\nAre you sure you want to download and install FFmpeg now?");
-  if (!choice) return;
 
   logStatus("Starting FFmpeg download & installation process...", "system");
 
   // Show the download progress overlay
+  console.log('[DEBUG] Setting download title...');
   downloadTitle.innerText = "Downloading FFmpeg";
   const descEl = modelDownloadOverlay.querySelector('p');
   const originalDesc = descEl ? descEl.innerText : '';
@@ -448,7 +445,8 @@ async function triggerFfmpegDownloadFlow() {
   downloadProgressBar.style.width = '0%';
   downloadBytes.innerText = 'Initializing...';
   downloadPct.innerText = '0%';
-  modelDownloadOverlay.classList.remove('d-none');
+  console.log('[DEBUG] Showing modelDownloadOverlay...', modelDownloadOverlay);
+  modelDownloadOverlay.style.setProperty('display', 'flex', 'important');
 
   try {
     const res = await window.api.downloadFfmpeg();
@@ -463,20 +461,19 @@ async function triggerFfmpegDownloadFlow() {
     logStatus(`FFmpeg Deployment Error: ${err.message}`, "error");
     alert(`FFmpeg setup failed:\n${err.message}`);
   } finally {
-    modelDownloadOverlay.classList.add('d-none');
+    console.log('[DEBUG] Hiding modelDownloadOverlay...');
+    modelDownloadOverlay.style.setProperty('display', 'none', 'important');
     if (descEl) descEl.innerText = originalDesc;
   }
 }
 
 async function triggerPiperDownloadFlow() {
-  const deps = await window.api.checkDependencies();
-  if (deps.piperEngine) {
-    //alert("Piper Engine is already downloaded and configured in your bin folder!");
+  console.log('[DEBUG] triggerPiperDownloadFlow clicked');
+  const choice = confirm("This action will download and extract the latest prebuilt Piper TTS Engine (approx. 22MB) from GitHub directly into your bin/ folder.\n\nAre you sure you want to download and install the Piper Engine now?");
+  if (!choice) {
+    console.log('[DEBUG] User cancelled Piper download prompt');
     return;
   }
-
-  const choice = confirm("This action will download and extract the latest prebuilt Piper TTS Engine (approx. 22MB) from GitHub directly into your bin/ folder.\n\nAre you sure you want to download and install the Piper Engine now?");
-  if (!choice) return;
 
   logStatus("Starting Piper engine download & installation...", "system");
   downloadTitle.innerText = "Downloading Piper Engine";
@@ -488,7 +485,8 @@ async function triggerPiperDownloadFlow() {
   downloadProgressBar.style.width = '0%';
   downloadBytes.innerText = 'Initializing...';
   downloadPct.innerText = '0%';
-  modelDownloadOverlay.classList.remove('d-none');
+  console.log('[DEBUG] Showing modelDownloadOverlay...', modelDownloadOverlay);
+  modelDownloadOverlay.style.setProperty('display', 'flex', 'important');
 
   try {
     const res = await window.api.downloadPiper();
@@ -505,20 +503,19 @@ async function triggerPiperDownloadFlow() {
     logStatus(`Piper Deployment Error: ${err.message}`, "error");
     alert(`Piper setup failed:\n${err.message}`);
   } finally {
-    modelDownloadOverlay.classList.add('d-none');
+    console.log('[DEBUG] Hiding modelDownloadOverlay...');
+    modelDownloadOverlay.style.setProperty('display', 'none', 'important');
     if (descEl) descEl.innerText = originalDesc;
   }
 }
 
 async function triggerWhisperDownloadFlow() {
-  const deps = await window.api.checkDependencies();
-  if (deps.whisperEngine) {
-    //alert("Whisper.cpp Engine is already downloaded and configured in your bin folder!");
+  console.log('[DEBUG] triggerWhisperDownloadFlow clicked');
+  const choice = confirm("This action will download and extract the prebuilt Whisper.cpp CPU Engine (approx. 8MB) from GitHub directly into your bin/ folder.\n\nAre you sure you want to download and install the Whisper.cpp Engine now?");
+  if (!choice) {
+    console.log('[DEBUG] User cancelled Whisper download prompt');
     return;
   }
-
-  const choice = confirm("This action will download and extract the prebuilt Whisper.cpp CPU Engine (approx. 8MB) from GitHub directly into your bin/ folder.\n\nAre you sure you want to download and install the Whisper.cpp Engine now?");
-  if (!choice) return;
 
   logStatus("Starting Whisper engine download & installation...", "system");
   downloadTitle.innerText = "Downloading Whisper Engine";
@@ -530,7 +527,8 @@ async function triggerWhisperDownloadFlow() {
   downloadProgressBar.style.width = '0%';
   downloadBytes.innerText = 'Initializing...';
   downloadPct.innerText = '0%';
-  modelDownloadOverlay.classList.remove('d-none');
+  console.log('[DEBUG] Showing modelDownloadOverlay...', modelDownloadOverlay);
+  modelDownloadOverlay.style.setProperty('display', 'flex', 'important');
 
   try {
     const res = await window.api.downloadWhisperEngine();
@@ -547,7 +545,8 @@ async function triggerWhisperDownloadFlow() {
     logStatus(`Whisper Deployment Error: ${err.message}`, "error");
     alert(`Whisper setup failed:\n${err.message}`);
   } finally {
-    modelDownloadOverlay.classList.add('d-none');
+    console.log('[DEBUG] Hiding modelDownloadOverlay...');
+    modelDownloadOverlay.style.setProperty('display', 'none', 'important');
     if (descEl) descEl.innerText = originalDesc;
   }
 }
@@ -586,7 +585,7 @@ async function ensureModelDownloaded() {
   const isDownloaded = availableModels.includes(targetModel);
   if (!isDownloaded) {
     // Show download UI
-    modelDownloadOverlay.style.display = 'flex';
+    modelDownloadOverlay.style.setProperty('display', 'flex', 'important');
     downloadTitle.innerText = `Downloading ${targetModel === 'ggml-tiny.bin' ? 'Tiny Model' : 'Base Model'}`;
     downloadProgressBar.style.width = '0%';
     downloadBytes.innerText = '0 / 0 MB';
@@ -618,7 +617,7 @@ async function ensureModelDownloaded() {
       alert(`Model Download Failed:\n${err.message}`);
       return false;
     } finally {
-      modelDownloadOverlay.style.display = 'none';
+      modelDownloadOverlay.style.setProperty('display', 'none', 'important');
     }
   }
   return true;

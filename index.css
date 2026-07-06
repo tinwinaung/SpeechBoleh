@@ -451,7 +451,45 @@ body {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important;
 }
 
-/* Multi-level Dropdown Submenus */
+/* Multi-level Dropdown Submenus - Precise VS Code Style Alignment */
 .dropdown-submenu:hover > .dropdown-menu {
   display: block !important;
+}
+
+.dropdown-submenu > .dropdown-menu {
+  position: absolute !important;
+  top: 0 !important;
+  left: 100% !important;
+  margin-top: 0 !important;
+  margin-left: 0 !important;
+}
+
+/* Custom dark styling for a premium editor-like dropdown experience */
+.dropdown-menu-dark {
+  background-color: #1e1e1e !important;
+  border: 1px solid #3c3c3c !important;
+  border-radius: 4px !important;
+  padding: 4px 0 !important;
+  min-width: 180px !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5) !important;
+}
+
+.dropdown-menu-dark .dropdown-item {
+  color: #cccccc !important;
+  font-size: 0.75rem !important;
+  padding: 6px 14px !important;
+  display: flex;
+  align-items: center;
+  transition: none !important;
+}
+
+/* Match the blue selection highlight style of VS Code in the picture */
+.dropdown-menu-dark .dropdown-item:hover,
+.dropdown-menu-dark .dropdown-submenu:hover > .dropdown-item {
+  background-color: #04395e !important; /* Solid VS Code active blue selection background */
+  color: #ffffff !important;
+}
+
+.dropdown-menu-dark .dropdown-item i {
+  font-size: 0.85rem;
 }
