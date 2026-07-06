@@ -51,6 +51,38 @@ function getLocalComponentConfig(component) {
   return null;
 }
 
+// Helper to resolve the best URL for a component (tries online package.json first, falls back to local config)
+async function getComponentDownloadUrl(component, defaultFallback) {
+  try {
+    // Try fetching online package.json with a timeout
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), 3000); // 3-second timeout
+
+    const response = await fetch('https://raw.githubusercontent.com/tinwinaung/SpeechBoleh/main/package.json', { signal: id.signal });
+    clearTimeout(id);
+
+    if (response.ok) {
+      const data = await response.json();
+      if (data.pkg && data.pkg[component] && data.pkg[component].url) {
+        console.log(`[getComponentDownloadUrl] Resolved online URL for ${component}: ${data.pkg[component].url}`);
+        return data.pkg[component].url;
+      }
+    }
+  } catch (e) {
+    console.warn(`[getComponentDownloadUrl] Failed to fetch online package.json for ${component}:`, e.message);
+  }
+
+  // Fall back to local package.json
+  const localConfig = getLocalComponentConfig(component);
+  if (localConfig && localConfig.url) {
+    console.log(`[getComponentDownloadUrl] Resolved local package.json URL for ${component}: ${localConfig.url}`);
+    return localConfig.url;
+  }
+
+  console.log(`[getComponentDownloadUrl] Resolved default fallback URL for ${component}: ${defaultFallback}`);
+  return defaultFallback;
+}
+
 // Ensure temp directory exists inside writable user data if packaged
 const tmpDir = app.isPackaged 
   ? path.join(app.getPath('userData'), 'tmp') 
@@ -1074,7 +1106,7 @@ ipcMain.handle('download-ffmpeg', async (event, customUrl, customVersion) => {
 
     // 5. Download the zip file with primary/fallback try-catch
     try {
-      const downloadLink = customUrl || ffmpegUrl;
+      const downloadLink = customUrl || await getComponentDownloadUrl('ffmpeg', ffmpegUrl);
       await downloadUrlToFile(downloadLink, ffmpegZipDest, (downloaded, total) => {
         const percentage = total ? Math.round((downloaded / total) * 100) : 0;
         sendStatus(`Downloading FFmpeg archive: ${percentage}%`, percentage);
@@ -1256,7 +1288,7 @@ ipcMain.handle('download-piper', async (event, customUrl, customVersion) => {
     if (!fs.existsSync(piperTargetDir)) fs.mkdirSync(piperTargetDir, { recursive: true });
 
     sendStatus('Downloading Piper Neural TTS Engine (approx. 22MB)...', 0);
-    const downloadLink = customUrl || url;
+    const downloadLink = customUrl || await getComponentDownloadUrl('piper', url);
     await downloadUrlToFile(downloadLink, piperZipDest, (downloaded, total) => {
       const percentage = total ? Math.round((downloaded / total) * 100) : 0;
       sendStatus(`Downloading Piper: ${percentage}%`, percentage);
@@ -1348,7 +1380,7 @@ ipcMain.handle('download-whisper-engine', async (event, customUrl, customVersion
     if (!fs.existsSync(whisperTargetDir)) fs.mkdirSync(whisperTargetDir, { recursive: true });
 
     sendStatus('Downloading Whisper.cpp Engine (approx. 8MB)...', 0);
-    const downloadLink = customUrl || url;
+    const downloadLink = customUrl || await getComponentDownloadUrl('whisper', url);
     await downloadUrlToFile(downloadLink, whisperZipDest, (downloaded, total) => {
       const percentage = total ? Math.round((downloaded / total) * 100) : 0;
       sendStatus(`Downloading Whisper: ${percentage}%`, percentage);
