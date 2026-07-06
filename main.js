@@ -821,7 +821,11 @@ ipcMain.handle('download-model', async (event, modelName) => {
 
         if (response.statusCode !== 200) {
           file.close();
-          if (fs.existsSync(tempDestPath)) fs.unlinkSync(tempDestPath);
+          try {
+            if (fs.existsSync(tempDestPath)) fs.unlinkSync(tempDestPath);
+          } catch (unlinkErr) {
+            console.warn('[Model Downloader] Failed to delete temp file:', unlinkErr.message);
+          }
           return resolve({ success: false, error: `Server returned status code: ${response.statusCode}` });
         }
 
@@ -859,7 +863,11 @@ ipcMain.handle('download-model', async (event, modelName) => {
 
       request.on('error', (err) => {
         file.close();
-        if (fs.existsSync(tempDestPath)) fs.unlinkSync(tempDestPath);
+        try {
+          if (fs.existsSync(tempDestPath)) fs.unlinkSync(tempDestPath);
+        } catch (unlinkErr) {
+          console.warn('[Model Downloader] Failed to delete temp file on error:', unlinkErr.message);
+        }
         console.error('[Model Downloader] Request error:', err);
         resolve({ success: false, error: err.message });
       });
@@ -898,7 +906,11 @@ function downloadUrlToFile(downloadUrl, destPath, onProgress) {
         }
         if (response.statusCode !== 200) {
           file.close();
-          if (fs.existsSync(tempDestPath)) fs.unlinkSync(tempDestPath);
+          try {
+            if (fs.existsSync(tempDestPath)) fs.unlinkSync(tempDestPath);
+          } catch (unlinkErr) {
+            console.warn('[Downloader] Failed to delete temp file:', unlinkErr.message);
+          }
           return reject(new Error(`Server returned ${response.statusCode}`));
         }
 
@@ -928,7 +940,11 @@ function downloadUrlToFile(downloadUrl, destPath, onProgress) {
 
       requestObj.on('error', (err) => {
         file.close();
-        if (fs.existsSync(tempDestPath)) fs.unlinkSync(tempDestPath);
+        try {
+          if (fs.existsSync(tempDestPath)) fs.unlinkSync(tempDestPath);
+        } catch (unlinkErr) {
+          console.warn('[Downloader] Failed to delete temp file on error:', unlinkErr.message);
+        }
         reject(err);
       });
     }
@@ -1138,25 +1154,43 @@ function findFileRecursively(dir, fileName) {
 // Helper: Recursively find and copy files with specified extensions (for restoring models/voices)
 function copyFilesWithExtension(srcDir, destDir, extensions) {
   if (!fs.existsSync(srcDir)) return;
-  if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
+  if (!fs.existsSync(destDir)) {
+    try {
+      fs.mkdirSync(destDir, { recursive: true });
+    } catch (e) {
+      console.error(`[Backup Restore Error] Failed to create destination directory ${destDir}:`, e);
+      return;
+    }
+  }
 
-  const files = fs.readdirSync(srcDir);
+  let files = [];
+  try {
+    files = fs.readdirSync(srcDir);
+  } catch (err) {
+    console.error(`[Backup Restore Error] Failed to read source directory ${srcDir}:`, err);
+    return;
+  }
+
   for (const file of files) {
     const srcPath = path.join(srcDir, file);
-    const stat = fs.statSync(srcPath);
-    if (stat.isDirectory()) {
-      copyFilesWithExtension(srcPath, destDir, extensions);
-    } else {
-      const ext = path.extname(file).toLowerCase();
-      if (extensions.includes(ext)) {
-        const destPath = path.join(destDir, file);
-        try {
-          fs.copyFileSync(srcPath, destPath);
-          console.log(`[Backup Restore] Restored model/voice asset: ${file}`);
-        } catch (err) {
-          console.error(`[Backup Restore Error] Failed to restore asset ${file}:`, err);
+    try {
+      const stat = fs.statSync(srcPath);
+      if (stat.isDirectory()) {
+        copyFilesWithExtension(srcPath, destDir, extensions);
+      } else {
+        const ext = path.extname(file).toLowerCase();
+        if (extensions.includes(ext)) {
+          const destPath = path.join(destDir, file);
+          try {
+            fs.copyFileSync(srcPath, destPath);
+            console.log(`[Backup Restore] Restored model/voice asset: ${file}`);
+          } catch (err) {
+            console.error(`[Backup Restore Error] Failed to restore asset ${file}:`, err);
+          }
         }
       }
+    } catch (statErr) {
+      console.error(`[Backup Restore Error] Failed to get stats for ${srcPath}:`, statErr);
     }
   }
 }

@@ -366,6 +366,7 @@ async function handleVoiceChange() {
   const isDownloaded = cachedVoices.includes(targetVoice);
 
   if (!isDownloaded) {
+    if (isDownloadInProgress()) return;
     // Show download UI (reusing modelDownloadOverlay)
     modelDownloadOverlay.style.setProperty('display', 'flex', 'important');
     downloadTitle.innerText = `Downloading Voice Model`;
@@ -405,6 +406,14 @@ async function handleVoiceChange() {
   }
 }
 
+function isDownloadInProgress() {
+  if (modelDownloadOverlay.style.display === 'flex') {
+    alert("An engine installation or download is already in progress. Please wait until it completes.");
+    return true;
+  }
+  return false;
+}
+
 // ----------------------------------------------------
 // STT: Populate Audio Input Devices (Microphones)
 // ----------------------------------------------------
@@ -441,6 +450,7 @@ async function populateMics() {
 
 async function triggerFfmpegDownloadFlow(customUrl, customVersion) {
   console.log('[DEBUG] triggerFfmpegDownloadFlow clicked');
+  if (isDownloadInProgress()) return;
   if (!customUrl) {
     const choice = confirm("This action will download and extract the latest FFmpeg Essentials build (approx. 90MB) from gyan.dev directly into your bin/ folder.\n\nAre you sure you want to download and install FFmpeg now?");
     if (!choice) {
@@ -486,6 +496,7 @@ async function triggerFfmpegDownloadFlow(customUrl, customVersion) {
 
 async function triggerPiperDownloadFlow(customUrl, customVersion) {
   console.log('[DEBUG] triggerPiperDownloadFlow clicked');
+  if (isDownloadInProgress()) return;
   if (!customUrl) {
     const choice = confirm("This action will download and extract the latest prebuilt Piper TTS Engine (approx. 22MB) from GitHub directly into your bin/ folder.\n\nAre you sure you want to download and install the Piper Engine now?");
     if (!choice) {
@@ -530,6 +541,7 @@ async function triggerPiperDownloadFlow(customUrl, customVersion) {
 
 async function triggerWhisperDownloadFlow(customUrl, customVersion) {
   console.log('[DEBUG] triggerWhisperDownloadFlow clicked');
+  if (isDownloadInProgress()) return;
   if (!customUrl) {
     const choice = confirm("This action will download and extract the prebuilt Whisper.cpp CPU Engine (approx. 8MB) from GitHub directly into your bin/ folder.\n\nAre you sure you want to download and install the Whisper.cpp Engine now?");
     if (!choice) {
@@ -727,6 +739,7 @@ async function ensureModelDownloaded() {
 
   const isDownloaded = availableModels.includes(targetModel);
   if (!isDownloaded) {
+    if (isDownloadInProgress()) return false;
     // Show download UI
     modelDownloadOverlay.style.setProperty('display', 'flex', 'important');
     downloadTitle.innerText = `Downloading ${targetModel === 'ggml-tiny.bin' ? 'Tiny Model' : 'Base Model'}`;
@@ -985,10 +998,12 @@ function setupEventListeners() {
   });
 
   // Settings & Info click listeners
-  titleBarSettings.addEventListener('click', () => {
-    logStatus('Settings toggled from title bar.', 'system');
-    alert('Settings panel under active development for SpeechBoleh Beta!');
-  });
+  if (titleBarSettings) {
+    titleBarSettings.addEventListener('click', () => {
+      logStatus('Settings toggled from title bar.', 'system');
+      alert('Settings panel under active development for SpeechBoleh Beta!');
+    });
+  }
 
   titleBarInfo.addEventListener('click', () => {
     logStatus('About dialog opened from title bar.', 'system');

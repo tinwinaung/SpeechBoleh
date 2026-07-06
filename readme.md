@@ -17,7 +17,7 @@ SpeechBoleh is a state-of-the-art, fully offline Desktop Client for high-fidelit
 
 ## 🚩 Release Note
 
-Current release includes both the Portable version and the Installer version packaged together in a single ZIP file. If you prefer not to install the application on your system, you can simply run SpeechBoleh 0.5.0.exe directly. At this moment, this release exclusively supports Windows 64-bit operating systems.
+Current release includes both the Portable version and the Installer version packaged together in a single ZIP file. If you prefer not to install the application on your system, you can simply run SpeechBoleh 0.6.0.exe directly. At this moment, this release exclusively supports Windows 64-bit operating systems.
 
 ### Prerequisite Note:
 When you launch the application for the first time, it will check for the Microsoft Visual C++ Redistributable. If it is missing from your system, the application will prompt you to automatically download and install it. Once the C++ Runtime installation finishes, the application will be ready to use.
@@ -159,7 +159,7 @@ When preparing a production package (e.g. using `electron-builder`), ensure deve
     "!bin/*.zip",
     "bin/ffmpeg/bin/ffmpeg.exe",
     "bin/piper/piper/**/*",
-    "bin/whisper/Release/whisper.exe"
+    "bin/whisper/Release/whisper-cli.exe"
   ]
 }
 ```
