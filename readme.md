@@ -237,12 +237,13 @@ When preparing a production package (e.g. using `electron-builder`), ensure deve
 ```json
 "build": {
   "files": [
-    "**/*",
-    "!scratch/**",
-    "!bin/*.zip",
-    "bin/ffmpeg/bin/ffmpeg.exe",
-    "bin/piper/piper/**/*",
-    "bin/whisper/Release/whisper-cli.exe"
+    "main.js",
+    "preload.js",
+    "renderer.js",
+    "index.html",
+    "index.css",
+    "assets/**/*",
+    "node_modules/**/*"
   ]
 }
 ```
