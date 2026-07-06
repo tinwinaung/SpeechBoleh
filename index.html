@@ -24,7 +24,7 @@
       <i class="bi bi-soundwave text-cyan fs-6"></i>
       <span class="fw-semibold text-white-50">SpeechBoleh</span>
       <span class="badge bg-secondary bg-opacity-25 text-secondary px-1.5 py-0.5 rounded-pill"
-        style="font-size: 0.6rem;">Beta v0.5.0</span>
+        style="font-size: 0.6rem;" id="title-bar-version">Beta v0.5.0</span>
       <div class="d-flex align-items-center gap-2 ms-3 border-start border-secondary border-opacity-20 ps-3"
         style="-webkit-app-region: no-drag;">
         <div class="dropdown d-flex align-items-center" style="line-height: 1;">
@@ -51,6 +51,12 @@
                 <li><a class="dropdown-item py-2" href="#" id="btn-download-whisper-ui"><i
                       class="bi bi-translate me-2 text-cyan"></i>Whisper</a></li>
               </ul>
+            </li>
+            <li><hr class="dropdown-divider border-secondary border-opacity-20 my-1"></li>
+            <li>
+              <a class="dropdown-item py-2" href="#" id="btn-check-update">
+                <i class="bi bi-arrow-clockwise me-2 text-cyan"></i>Check for Updates
+              </a>
             </li>
           </ul>
         </div>
@@ -504,7 +510,7 @@
       <span class="small text-secondary text-truncate" id="status-console" style="font-size: 0.75rem;">System
         initialized. Local STT/TTS ready.</span>
     </div>
-    <div class="small text-secondary font-monospace" style="font-size: 0.7rem;">v1.0.0 (Win64)</div>
+    <div class="small text-secondary font-monospace" id="footer-version" style="font-size: 0.7rem;">v1.0.0 (Win64)</div>
   </footer>
 
   <!-- About Modal -->
@@ -526,7 +532,7 @@
             <i class="bi bi-soundwave text-white fs-2"></i>
           </div>
           <h4 class="h5 fw-bold text-white mb-1">SpeechBoleh</h4>
-          <p class="small text-secondary mb-3">Version Beta v0.5.0</p>
+          <p class="small text-secondary mb-3" id="about-version">Version Beta v0.5.0</p>
           <hr class="border-secondary border-opacity-10 my-3">
           <p class="small text-white-50 leading-relaxed mb-0">
             SpeechBoleh is a premium local, fully offline Speech-to-Text (STT) and Text-to-Speech (TTS) desktop client
