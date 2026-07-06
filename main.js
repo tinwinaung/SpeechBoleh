@@ -51,8 +51,8 @@ function getLocalComponentConfig(component) {
   return null;
 }
 
-// Helper to resolve the best URL for a component (tries online package.json first, falls back to local config)
-async function getComponentDownloadUrl(component, defaultFallback) {
+// Helper to resolve the best URL and version for a component (tries online package.json first, falls back to local config)
+async function getComponentDownloadUrl(component, defaultFallbackUrl, defaultFallbackVersion = 'latest') {
   try {
     // Try fetching online package.json with a timeout
     const controller = new AbortController();
@@ -64,8 +64,10 @@ async function getComponentDownloadUrl(component, defaultFallback) {
     if (response.ok) {
       const data = await response.json();
       if (data.pkg && data.pkg[component] && data.pkg[component].url) {
-        console.log(`[getComponentDownloadUrl] Resolved online URL for ${component}: ${data.pkg[component].url}`);
-        return data.pkg[component].url;
+        const onlineUrl = data.pkg[component].url;
+        const onlineVersion = data.pkg[component].version || 'latest';
+        console.log(`[getComponentDownloadUrl] Resolved online URL for ${component}: ${onlineUrl} (version: ${onlineVersion})`);
+        return { url: onlineUrl, version: onlineVersion, source: 'online' };
       }
     }
   } catch (e) {
@@ -75,12 +77,14 @@ async function getComponentDownloadUrl(component, defaultFallback) {
   // Fall back to local package.json
   const localConfig = getLocalComponentConfig(component);
   if (localConfig && localConfig.url) {
-    console.log(`[getComponentDownloadUrl] Resolved local package.json URL for ${component}: ${localConfig.url}`);
-    return localConfig.url;
+    const localUrl = localConfig.url;
+    const localVersion = localConfig.version || 'latest';
+    console.log(`[getComponentDownloadUrl] Resolved local package.json URL for ${component}: ${localUrl}`);
+    return { url: localUrl, version: localVersion, source: 'local' };
   }
 
-  console.log(`[getComponentDownloadUrl] Resolved default fallback URL for ${component}: ${defaultFallback}`);
-  return defaultFallback;
+  console.log(`[getComponentDownloadUrl] Resolved default fallback URL for ${component}: ${defaultFallbackUrl}`);
+  return { url: defaultFallbackUrl, version: defaultFallbackVersion, source: 'fallback' };
 }
 
 // Ensure temp directory exists inside writable user data if packaged
@@ -1078,6 +1082,21 @@ ipcMain.handle('download-ffmpeg', async (event, customUrl, customVersion) => {
   const ffmpegFallbackUrl = 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip';
 
   let backedUp = false;
+  let downloadLink;
+  let downloadVersion;
+  let resolvedOnline = false;
+
+  if (customUrl) {
+    downloadLink = customUrl;
+    downloadVersion = customVersion || 'latest';
+  } else {
+    const resolved = await getComponentDownloadUrl('ffmpeg', ffmpegUrl, 'latest');
+    downloadLink = resolved.url;
+    downloadVersion = resolved.version;
+    if (resolved.source === 'online') {
+      resolvedOnline = true;
+    }
+  }
 
   try {
     // 1. Ensure temp directory exists
@@ -1106,7 +1125,6 @@ ipcMain.handle('download-ffmpeg', async (event, customUrl, customVersion) => {
 
     // 5. Download the zip file with primary/fallback try-catch
     try {
-      const downloadLink = customUrl || await getComponentDownloadUrl('ffmpeg', ffmpegUrl);
       await downloadUrlToFile(downloadLink, ffmpegZipDest, (downloaded, total) => {
         const percentage = total ? Math.round((downloaded / total) * 100) : 0;
         sendStatus(`Downloading FFmpeg archive: ${percentage}%`, percentage);
@@ -1165,8 +1183,8 @@ ipcMain.handle('download-ffmpeg', async (event, customUrl, customVersion) => {
       }
       // Re-configure FFmpeg path globally for fluent-ffmpeg now that it exists locally
       configureFfmpeg();
-      if (customUrl && customVersion) {
-        updateLocalPackageJson('ffmpeg', customUrl, customVersion);
+      if (customUrl || resolvedOnline) {
+        updateLocalPackageJson('ffmpeg', downloadLink, downloadVersion);
       }
       return { success: true, path: ffmpegFinalPath };
     } else {
@@ -1270,6 +1288,21 @@ ipcMain.handle('download-piper', async (event, customUrl, customVersion) => {
   const url = pkgConfig ? pkgConfig.url : 'https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_windows_amd64.zip';
 
   let backedUp = false;
+  let downloadLink;
+  let downloadVersion;
+  let resolvedOnline = false;
+
+  if (customUrl) {
+    downloadLink = customUrl;
+    downloadVersion = customVersion || 'latest';
+  } else {
+    const resolved = await getComponentDownloadUrl('piper', url, 'latest');
+    downloadLink = resolved.url;
+    downloadVersion = resolved.version;
+    if (resolved.source === 'online') {
+      resolvedOnline = true;
+    }
+  }
 
   try {
     if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
@@ -1288,7 +1321,6 @@ ipcMain.handle('download-piper', async (event, customUrl, customVersion) => {
     if (!fs.existsSync(piperTargetDir)) fs.mkdirSync(piperTargetDir, { recursive: true });
 
     sendStatus('Downloading Piper Neural TTS Engine (approx. 22MB)...', 0);
-    const downloadLink = customUrl || await getComponentDownloadUrl('piper', url);
     await downloadUrlToFile(downloadLink, piperZipDest, (downloaded, total) => {
       const percentage = total ? Math.round((downloaded / total) * 100) : 0;
       sendStatus(`Downloading Piper: ${percentage}%`, percentage);
@@ -1317,8 +1349,8 @@ ipcMain.handle('download-piper', async (event, customUrl, customVersion) => {
       if (backedUp && fs.existsSync(piperTargetDirBak)) {
         fs.rmSync(piperTargetDirBak, { recursive: true, force: true });
       }
-      if (customUrl && customVersion) {
-        updateLocalPackageJson('piper', customUrl, customVersion);
+      if (customUrl || resolvedOnline) {
+        updateLocalPackageJson('piper', downloadLink, downloadVersion);
       }
       return { success: true, path: piperFinalExe };
     } else {
@@ -1362,6 +1394,21 @@ ipcMain.handle('download-whisper-engine', async (event, customUrl, customVersion
   const url = pkgConfig ? pkgConfig.url : 'https://github.com/ggml-org/whisper.cpp/releases/download/v1.9.1/whisper-bin-x64.zip';
 
   let backedUp = false;
+  let downloadLink;
+  let downloadVersion;
+  let resolvedOnline = false;
+
+  if (customUrl) {
+    downloadLink = customUrl;
+    downloadVersion = customVersion || 'latest';
+  } else {
+    const resolved = await getComponentDownloadUrl('whisper', url, 'latest');
+    downloadLink = resolved.url;
+    downloadVersion = resolved.version;
+    if (resolved.source === 'online') {
+      resolvedOnline = true;
+    }
+  }
 
   try {
     if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
@@ -1380,7 +1427,6 @@ ipcMain.handle('download-whisper-engine', async (event, customUrl, customVersion
     if (!fs.existsSync(whisperTargetDir)) fs.mkdirSync(whisperTargetDir, { recursive: true });
 
     sendStatus('Downloading Whisper.cpp Engine (approx. 8MB)...', 0);
-    const downloadLink = customUrl || await getComponentDownloadUrl('whisper', url);
     await downloadUrlToFile(downloadLink, whisperZipDest, (downloaded, total) => {
       const percentage = total ? Math.round((downloaded / total) * 100) : 0;
       sendStatus(`Downloading Whisper: ${percentage}%`, percentage);
@@ -1448,8 +1494,8 @@ ipcMain.handle('download-whisper-engine', async (event, customUrl, customVersion
       if (backedUp && fs.existsSync(whisperBaseDirBak)) {
         fs.rmSync(whisperBaseDirBak, { recursive: true, force: true });
       }
-      if (customUrl && customVersion) {
-        updateLocalPackageJson('whisper', customUrl, customVersion);
+      if (customUrl || resolvedOnline) {
+        updateLocalPackageJson('whisper', downloadLink, downloadVersion);
       }
       return { success: true, path: whisperFinalExe };
     } else {
