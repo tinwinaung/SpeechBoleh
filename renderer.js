@@ -318,9 +318,9 @@ async function checkAndSetupFirstRun() {
       await syncModels();
     }
 
-    // 4. Download Whisper default model (ggml-tiny.bin) if missing
+    // 4. Download Whisper default model (ggml-base.bin) if missing
     if (missingWhisperModel) {
-      const defaultModel = 'ggml-tiny.bin';
+      const defaultModel = 'ggml-base.bin';
       logStatus(`Downloading default Whisper model (${defaultModel})...`, 'system');
       if (descEl) descEl.innerText = `Downloading default speech recognition model weight (${defaultModel}). This might take a few moments.`;
       downloadTitle.innerText = "Downloading Whisper Model";
