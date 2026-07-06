@@ -163,5 +163,6 @@ contextBridge.exposeInMainWorld('api', {
   maximizeWindow: () => ipcRenderer.send('window-maximize'),
   closeWindow: () => ipcRenderer.send('window-close'),
   onWindowMaximizedState: (callback) => ipcRenderer.on('window-maximized-state', (event, isMaximized) => callback(isMaximized)),
-  checkDependencies: () => ipcRenderer.invoke('check-dependencies')
+  checkDependencies: () => ipcRenderer.invoke('check-dependencies'),
+  checkForUpdates: () => ipcRenderer.invoke('check-for-updates')
 });

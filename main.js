@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, session, protocol, net, clipboard, Menu, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, session, protocol, net, clipboard, Menu, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const https = require('https');
@@ -606,6 +606,72 @@ ipcMain.handle('delete-file', async (event, filePath) => {
   } catch (error) {
     console.warn('[IPC Delete File Warning]', error);
     return { success: false, error: error.message };
+  }
+});
+
+// Helper: Check if remote version is larger than local version
+function isVersionNewer(local, remote) {
+  const localParts = String(local).split('-')[0].split('.').map(Number);
+  const remoteParts = String(remote).split('-')[0].split('.').map(Number);
+  for (let i = 0; i < 3; i++) {
+    const localPart = localParts[i] || 0;
+    const remotePart = remoteParts[i] || 0;
+    if (remotePart > localPart) return true;
+    if (localPart > remotePart) return false;
+  }
+  return false;
+}
+
+// IPC: Check for updates online from GitHub package.json
+ipcMain.handle('check-for-updates', async () => {
+  const localVersion = app.getVersion();
+  try {
+    const response = await fetch('https://raw.githubusercontent.com/tinwinaung/SpeechBoleh/main/package.json');
+    if (!response.ok) {
+      throw new Error(`Failed to fetch online package.json (status ${response.status})`);
+    }
+    const data = await response.json();
+    const remoteVersion = data.version;
+    if (!remoteVersion) {
+      throw new Error('Version field not found in remote package.json');
+    }
+
+    const updateAvailable = isVersionNewer(localVersion, remoteVersion);
+
+    if (updateAvailable) {
+      const choice = dialog.showMessageBoxSync(mainWindow, {
+        type: 'question',
+        buttons: ['Yes', 'No'],
+        defaultId: 0,
+        title: 'Update Available',
+        message: `A new version of SpeechBoleh is available online.\n\nCurrent Version: v${localVersion}\nLatest Version: v${remoteVersion}\n\nWould you like to go to the release page?`,
+        cancelId: 1
+      });
+
+      if (choice === 0) {
+        shell.openExternal('https://github.com/tinwinaung/SpeechBoleh/releases');
+      }
+      return { success: true, updateAvailable: true, currentVersion: localVersion, latestVersion: remoteVersion };
+    } else {
+      dialog.showMessageBoxSync(mainWindow, {
+        type: 'info',
+        buttons: ['OK'],
+        defaultId: 0,
+        title: 'Up to Date',
+        message: `SpeechBoleh is up to date.\n\nCurrent Version: v${localVersion}`
+      });
+      return { success: true, updateAvailable: false, currentVersion: localVersion, latestVersion: remoteVersion };
+    }
+  } catch (err) {
+    console.error('[Update Check Error]', err);
+    dialog.showMessageBoxSync(mainWindow, {
+      type: 'error',
+      buttons: ['OK'],
+      defaultId: 0,
+      title: 'Update Check Failed',
+      message: `Failed to check for updates:\n${err.message}\n\nPlease check your internet connection and try again.`
+    });
+    return { success: false, error: err.message };
   }
 });
 

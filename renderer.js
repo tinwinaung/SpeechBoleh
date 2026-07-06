@@ -41,6 +41,7 @@ const sttLoadingOverlay = document.getElementById('stt-loading-overlay');
 const btnDownloadFfmpegUi = document.getElementById('btn-download-ffmpeg-ui');
 const btnDownloadPiperUi = document.getElementById('btn-download-piper-ui');
 const btnDownloadWhisperUi = document.getElementById('btn-download-whisper-ui');
+const btnCheckUpdate = document.getElementById('btn-check-update');
 
 // Custom Window Controls
 const titleBarMinimize = document.getElementById('title-bar-minimize');
@@ -551,6 +552,29 @@ async function triggerWhisperDownloadFlow() {
   }
 }
 
+async function triggerCheckUpdateFlow() {
+  console.log('[DEBUG] triggerCheckUpdateFlow clicked');
+  logStatus("Checking for updates...", "system");
+  btnCheckUpdate.classList.add('disabled');
+  try {
+    const res = await window.api.checkForUpdates();
+    if (res.success) {
+      if (res.updateAvailable) {
+        logStatus(`Update available: v${res.latestVersion} (current: v${res.currentVersion})`, "warning");
+      } else {
+        logStatus(`SpeechBoleh is up to date (v${res.currentVersion}).`, "success");
+      }
+    } else {
+      throw new Error(res.error || "Failed to check for updates");
+    }
+  } catch (err) {
+    console.error("Update check failed:", err);
+    logStatus(`Update Check Error: ${err.message}`, "error");
+  } finally {
+    btnCheckUpdate.classList.remove('disabled');
+  }
+}
+
 // ----------------------------------------------------
 // STT: Whisper Model Syncing & Downloading
 // ----------------------------------------------------
@@ -706,6 +730,10 @@ function setupEventListeners() {
   btnDownloadWhisperUi.addEventListener('click', (e) => {
     e.preventDefault();
     triggerWhisperDownloadFlow();
+  });
+  btnCheckUpdate.addEventListener('click', (e) => {
+    e.preventDefault();
+    triggerCheckUpdateFlow();
   });
 
   // Clear activity logs
