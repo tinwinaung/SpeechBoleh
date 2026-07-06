@@ -693,12 +693,20 @@ ipcMain.handle('check-for-updates', async () => {
       const remoteVer = remoteData.version || 'latest';
       const url = remoteData.url || '';
       
-      // If local is not installed, it needs update/install
       let updateAvailable = false;
       if (localVer === 'Not Installed') {
         updateAvailable = true;
-      } else if (localVer !== remoteVer) {
+      } else if (localVer === 'latest' && remoteVer === 'latest') {
+        updateAvailable = false;
+      } else if (localVer !== 'latest' && remoteVer === 'latest') {
+        // Local version is number, online version is latest
         updateAvailable = true;
+      } else if (localVer === 'latest' && remoteVer !== 'latest') {
+        // Local version is latest, online version is number
+        updateAvailable = true;
+      } else {
+        // Both local and remote are version numbers
+        updateAvailable = isVersionNewer(localVer, remoteVer);
       }
 
       return {
