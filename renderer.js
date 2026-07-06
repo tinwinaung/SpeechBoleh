@@ -38,6 +38,18 @@ const sttCharCount = document.getElementById('stt-char-count');
 const btnCopyStt = document.getElementById('btn-copy-stt');
 const btnFullscreenStt = document.getElementById('btn-fullscreen-stt');
 const sttLoadingOverlay = document.getElementById('stt-loading-overlay');
+const btnDownloadFfmpegUi = document.getElementById('btn-download-ffmpeg-ui');
+const btnDownloadPiperUi = document.getElementById('btn-download-piper-ui');
+const btnDownloadWhisperUi = document.getElementById('btn-download-whisper-ui');
+const btnCheckUpdate = document.getElementById('btn-check-update');
+
+// Custom Window Controls
+const titleBarMinimize = document.getElementById('title-bar-minimize');
+const titleBarMaximize = document.getElementById('title-bar-maximize');
+const titleBarClose = document.getElementById('title-bar-close');
+const maximizeIcon = document.getElementById('maximize-icon');
+const titleBarSettings = document.getElementById('title-bar-settings');
+const titleBarInfo = document.getElementById('title-bar-info');
 
 // Whisper Model Downloader & Diagnostics elements
 const modelSelect = document.getElementById('model-select');
@@ -84,10 +96,112 @@ const statusConsole = document.getElementById('status-console');
 const logConsole = document.getElementById('log-console');
 const btnClearLogs = document.getElementById('btn-clear-logs');
 
+// Dialog Modal Cache
+const appDialogEl = document.getElementById('appDialogModal');
+const appDialogTitle = document.getElementById('appDialogModalLabel');
+const appDialogMessage = document.getElementById('app-dialog-message');
+let appDialogModalInstance = null;
+
+function getAppDialogModal() {
+  if (!appDialogModalInstance && typeof bootstrap !== 'undefined') {
+    appDialogModalInstance = new bootstrap.Modal(appDialogEl);
+  }
+  return appDialogModalInstance;
+}
+
+function showAppAlert(message, title = "SpeechBoleh Alert") {
+  // Hide fullscreen download overlay first if visible to prevent layout deadlock
+  if (modelDownloadOverlay && modelDownloadOverlay.style.display === 'flex') {
+    modelDownloadOverlay.style.setProperty('display', 'none', 'important');
+  }
+
+  return new Promise((resolve) => {
+    const modal = getAppDialogModal();
+    if (!modal) {
+      alert(message);
+      resolve();
+      return;
+    }
+    
+    appDialogTitle.innerText = title;
+    appDialogMessage.innerText = message;
+    
+    const cancelBtn = document.getElementById('btn-dialog-cancel');
+    const okBtn = document.getElementById('btn-dialog-ok');
+    
+    cancelBtn.style.display = 'none';
+    
+    const newOk = okBtn.cloneNode(true);
+    okBtn.parentNode.replaceChild(newOk, okBtn);
+    
+    newOk.addEventListener('click', () => {
+      modal.hide();
+      resolve();
+    });
+    
+    modal.show();
+  });
+}
+
+function showAppConfirm(message, title = "SpeechBoleh Confirmation") {
+  // Hide fullscreen download overlay first if visible to prevent layout deadlock
+  if (modelDownloadOverlay && modelDownloadOverlay.style.display === 'flex') {
+    modelDownloadOverlay.style.setProperty('display', 'none', 'important');
+  }
+
+  return new Promise((resolve) => {
+    const modal = getAppDialogModal();
+    if (!modal) {
+      resolve(confirm(message));
+      return;
+    }
+    
+    appDialogTitle.innerText = title;
+    appDialogMessage.innerText = message;
+    
+    const cancelBtn = document.getElementById('btn-dialog-cancel');
+    const okBtn = document.getElementById('btn-dialog-ok');
+    
+    cancelBtn.style.display = 'inline-block';
+    
+    const newOk = okBtn.cloneNode(true);
+    okBtn.parentNode.replaceChild(newOk, okBtn);
+    
+    const newCancel = cancelBtn.cloneNode(true);
+    cancelBtn.parentNode.replaceChild(newCancel, cancelBtn);
+    
+    newOk.addEventListener('click', () => {
+      modal.hide();
+      resolve(true);
+    });
+    
+    newCancel.addEventListener('click', () => {
+      modal.hide();
+      resolve(false);
+    });
+    
+    modal.show();
+  });
+}
+
 // ----------------------------------------------------
 // System Initialization
 // ----------------------------------------------------
 window.addEventListener('DOMContentLoaded', async () => {
+  // Set version numbers dynamically from package.json
+  try {
+    const version = await window.api.getAppVersion();
+    const titleBarVersion = document.getElementById('title-bar-version');
+    const aboutVersion = document.getElementById('about-version');
+    const footerVersion = document.getElementById('footer-version');
+
+    if (titleBarVersion) titleBarVersion.innerText = `Beta v${version}`;
+    if (aboutVersion) aboutVersion.innerText = `Version Beta v${version}`;
+    if (footerVersion) footerVersion.innerText = `v${version} (Win64)`;
+  } catch (err) {
+    console.error('Failed to get app version:', err);
+  }
+
   logStatus('Starting local SpeechBoleh services...', 'system');
   logStatus('Scanning system microphones...', 'info');
   await populateMics();
@@ -96,8 +210,181 @@ window.addEventListener('DOMContentLoaded', async () => {
   logStatus('Syncing offline Whisper model weights...', 'info');
   await syncModels();
   setupEventListeners();
+
+  // Run first-run setup checks
+  await checkAndSetupFirstRun();
+
   logStatus('System ready. All offline pipelines successfully loaded.', 'success');
 });
+
+// Automatic first-run setup checker
+async function checkAndSetupFirstRun() {
+  logStatus('Checking system dependencies...', 'info');
+  try {
+    const deps = await window.api.checkDependencies();
+
+    // Determine what needs to be downloaded
+    const missingFfmpeg = !deps.ffmpeg;
+    const missingPiper = !deps.piperEngine;
+    const missingWhisper = !deps.whisperEngine;
+
+    logStatus(`Dependency status: FFmpeg=${deps.ffmpeg}, Piper=${deps.piperEngine}, Whisper=${deps.whisperEngine}`);
+
+    // Check Whisper models
+    let missingWhisperModel = false;
+    try {
+      const models = await window.api.getAvailableModels();
+      if (!models || models.length === 0) {
+        missingWhisperModel = true;
+      }
+    } catch (e) {
+      missingWhisperModel = true;
+    }
+
+    // Check Piper voices
+    let missingPiperVoice = false;
+    try {
+      const voices = await window.api.getVoices();
+      if (!voices || voices.length === 0) {
+        missingPiperVoice = true;
+      }
+    } catch (e) {
+      missingPiperVoice = true;
+    }
+
+    // Only trigger first-run setup if the core executable binaries themselves do not exist
+    const needsSetup = missingFfmpeg || missingPiper || missingWhisper;
+
+    if (!needsSetup) {
+      logStatus('All core engine binaries are present.', 'success');
+      return;
+    }
+
+    logStatus('First-run dependencies missing. Launching automatic setup...', 'warning');
+
+    // Show download overlay dialog modal
+    modelDownloadOverlay.style.setProperty('display', 'flex', 'important');
+
+    const descEl = modelDownloadOverlay.querySelector('p');
+    const originalDesc = descEl ? descEl.innerText : '';
+
+    // 1. Download FFmpeg if missing
+    if (missingFfmpeg) {
+      logStatus('Downloading FFmpeg core dependency...', 'system');
+      if (descEl) descEl.innerText = "Downloading and extracting FFmpeg audio transcoding tools. Please wait...";
+      downloadTitle.innerText = "Installing FFmpeg";
+      downloadProgressBar.style.width = '0%';
+      downloadPct.innerText = '0%';
+      downloadBytes.innerText = 'Initializing...';
+
+      const res = await window.api.downloadFfmpeg();
+      if (!res.success) {
+        throw new Error(`FFmpeg setup failed: ${res.error}`);
+      }
+      logStatus('FFmpeg configured successfully.', 'success');
+    }
+
+    // 2. Download Piper Engine if missing
+    if (missingPiper) {
+      logStatus('Downloading Piper Neural TTS Engine...', 'system');
+      if (descEl) descEl.innerText = "Downloading and extracting Piper text-to-speech engine binaries. Please wait...";
+      downloadTitle.innerText = "Installing Piper Engine";
+      downloadProgressBar.style.width = '0%';
+      downloadPct.innerText = '0%';
+      downloadBytes.innerText = 'Initializing...';
+
+      const res = await window.api.downloadPiper();
+      if (!res.success) {
+        throw new Error(`Piper Engine setup failed: ${res.error}`);
+      }
+      logStatus('Piper Engine configured successfully.', 'success');
+      await populateVoices();
+    }
+
+    // 3. Download Whisper Engine if missing
+    if (missingWhisper) {
+      logStatus('Downloading Whisper.cpp transcription engine...', 'system');
+      if (descEl) descEl.innerText = "Downloading and extracting Whisper speech-to-text engine binaries. Please wait...";
+      downloadTitle.innerText = "Installing Whisper Engine";
+      downloadProgressBar.style.width = '0%';
+      downloadPct.innerText = '0%';
+      downloadBytes.innerText = 'Initializing...';
+
+      const res = await window.api.downloadWhisperEngine();
+      if (!res.success) {
+        throw new Error(`Whisper Engine setup failed: ${res.error}`);
+      }
+      logStatus('Whisper Engine configured successfully.', 'success');
+      await syncModels();
+    }
+
+    // 4. Download Whisper default model (ggml-base.bin) if missing
+    if (missingWhisperModel) {
+      const defaultModel = 'ggml-base.bin';
+      logStatus(`Downloading default Whisper model (${defaultModel})...`, 'system');
+      if (descEl) descEl.innerText = `Downloading default speech recognition model weight (${defaultModel}). This might take a few moments.`;
+      downloadTitle.innerText = "Downloading Whisper Model";
+      downloadProgressBar.style.width = '0%';
+      downloadPct.innerText = '0%';
+      downloadBytes.innerText = 'Initializing...';
+
+      // Register temporary progress listeners
+      window.api.onDownloadProgress((data) => {
+        downloadProgressBar.style.width = `${data.percentage}%`;
+        downloadPct.innerText = `${data.percentage}%`;
+        downloadBytes.innerText = `Downloaded ${formatBytes(data.downloaded)} / ${formatBytes(data.total)}`;
+      });
+
+      const res = await window.api.downloadModel(defaultModel);
+      if (!res.success) {
+        throw new Error(`Whisper model setup failed: ${res.error}`);
+      }
+      logStatus('Whisper default model cached successfully.', 'success');
+      await syncModels();
+      modelSelect.value = defaultModel;
+      currentModel = defaultModel;
+      await window.api.setActiveModel(defaultModel);
+    }
+
+    // 5. Download Piper default voice model (en_US-joe-medium.onnx) if missing
+    if (missingPiperVoice) {
+      const defaultVoice = 'en_US-joe-medium.onnx';
+      logStatus(`Downloading default Piper voice model (${defaultVoice})...`, 'system');
+      if (descEl) descEl.innerText = `Downloading default voice synthesis model (${defaultVoice}). Please wait...`;
+      downloadTitle.innerText = "Downloading Piper Voice";
+      downloadProgressBar.style.width = '0%';
+      downloadPct.innerText = '0%';
+      downloadBytes.innerText = 'Initializing...';
+
+      // Register temporary progress listeners
+      window.api.onVoiceDownloadProgress((data) => {
+        downloadProgressBar.style.width = `${data.percentage}%`;
+        downloadPct.innerText = `${data.percentage}%`;
+        downloadBytes.innerText = `Downloaded ${formatBytes(data.downloaded)} / ${formatBytes(data.total)}`;
+      });
+
+      const res = await window.api.downloadVoiceModel(defaultVoice);
+      if (!res.success) {
+        throw new Error(`Piper voice setup failed: ${res.error}`);
+      }
+      logStatus('Piper default voice model cached successfully.', 'success');
+      await populateVoices();
+    }
+
+    await showAppAlert('First-run dependencies setup completed successfully! All offline modules are ready for use.');
+
+  } catch (err) {
+    console.error('[First Run Setup Error]', err);
+    logStatus(`Setup Error: ${err.message}`, 'error');
+    await showAppAlert(`First-run setup failed:\n${err.message}\n\nYou can retry downloading missing modules manually from the "Download Engines" menu.`);
+  } finally {
+    // Hide overlay and restore default texts
+    modelDownloadOverlay.style.setProperty('display', 'none', 'important');
+
+    // Reset overlay titles to standard models
+    downloadTitle.innerText = "Downloading Model";
+  }
+}
 
 // Helper for UI Console Logger
 function logStatus(message, type = 'info') {
@@ -167,8 +454,9 @@ async function handleVoiceChange() {
   const isDownloaded = cachedVoices.includes(targetVoice);
 
   if (!isDownloaded) {
+    if (await isDownloadInProgress()) return;
     // Show download UI (reusing modelDownloadOverlay)
-    modelDownloadOverlay.style.display = 'flex';
+    modelDownloadOverlay.style.setProperty('display', 'flex', 'important');
     downloadTitle.innerText = `Downloading Voice Model`;
     downloadProgressBar.style.width = '0%';
     downloadBytes.innerText = '0 / 0 MB';
@@ -196,14 +484,22 @@ async function handleVoiceChange() {
       }
     } catch (err) {
       console.error('[Voice Download Error]', err);
-      alert(`Voice Download Failed:\n${err.message}\nReverting selection.`);
+      await showAppAlert(`Voice Download Failed:\n${err.message}\nReverting selection.`);
       // Revert select back to default Lessac model
       voiceSelect.value = 'en_US-lessac-medium.onnx';
       return;
     } finally {
-      modelDownloadOverlay.style.display = 'none';
+      modelDownloadOverlay.style.setProperty('display', 'none', 'important');
     }
   }
+}
+
+async function isDownloadInProgress() {
+  if (modelDownloadOverlay.style.display === 'flex') {
+    await showAppAlert("An engine installation or download is already in progress. Please wait until it completes.");
+    return true;
+  }
+  return false;
 }
 
 // ----------------------------------------------------
@@ -240,6 +536,264 @@ async function populateMics() {
   }
 }
 
+async function triggerFfmpegDownloadFlow(customUrl, customVersion) {
+  console.log('[DEBUG] triggerFfmpegDownloadFlow clicked');
+  if (await isDownloadInProgress()) return;
+  if (!customUrl) {
+    const choice = await showAppConfirm("This action will download and extract the latest FFmpeg Essentials build (approx. 90MB) from gyan.dev directly into your bin/ folder.\n\nAre you sure you want to download and install FFmpeg now?");
+    if (!choice) {
+      console.log('[DEBUG] User cancelled FFmpeg download prompt');
+      return;
+    }
+  }
+
+  logStatus("Starting FFmpeg download & installation process...", "system");
+
+  // Show the download progress overlay
+  console.log('[DEBUG] Setting download title...');
+  downloadTitle.innerText = "Downloading FFmpeg";
+  const descEl = modelDownloadOverlay.querySelector('p');
+  const originalDesc = descEl ? descEl.innerText : '';
+  if (descEl) {
+    descEl.innerText = "Fetching latest binaries and configuring environment. This may take a few minutes depending on your internet connection.";
+  }
+  downloadProgressBar.style.width = '0%';
+  downloadBytes.innerText = 'Initializing...';
+  downloadPct.innerText = '0%';
+  console.log('[DEBUG] Showing modelDownloadOverlay...', modelDownloadOverlay);
+  modelDownloadOverlay.style.setProperty('display', 'flex', 'important');
+
+  try {
+    const res = await window.api.downloadFfmpeg(customUrl, customVersion);
+    if (res.success) {
+      logStatus(`FFmpeg configured successfully at: ${res.path}`, "success");
+      await showAppAlert(`FFmpeg downloaded and configured successfully!`);
+    } else {
+      throw new Error(res.error || "Unknown configuration error");
+    }
+  } catch (err) {
+    console.error("FFmpeg deployment failed:", err);
+    logStatus(`FFmpeg Deployment Error: ${err.message}`, "error");
+    await showAppAlert(`FFmpeg setup failed:\n${err.message}`);
+  } finally {
+    console.log('[DEBUG] Hiding modelDownloadOverlay...');
+    modelDownloadOverlay.style.setProperty('display', 'none', 'important');
+    if (descEl) descEl.innerText = originalDesc;
+  }
+}
+
+async function triggerPiperDownloadFlow(customUrl, customVersion) {
+  console.log('[DEBUG] triggerPiperDownloadFlow clicked');
+  if (await isDownloadInProgress()) return;
+  if (!customUrl) {
+    const choice = await showAppConfirm("This action will download and extract the latest prebuilt Piper TTS Engine (approx. 22MB) from GitHub directly into your bin/ folder.\n\nAre you sure you want to download and install the Piper Engine now?");
+    if (!choice) {
+      console.log('[DEBUG] User cancelled Piper download prompt');
+      return;
+    }
+  }
+
+  logStatus("Starting Piper engine download & installation...", "system");
+  downloadTitle.innerText = "Downloading Piper Engine";
+  const descEl = modelDownloadOverlay.querySelector('p');
+  const originalDesc = descEl ? descEl.innerText : '';
+  if (descEl) {
+    descEl.innerText = "Fetching prebuilt voice engine libraries and executables. This may take a few moments.";
+  }
+  downloadProgressBar.style.width = '0%';
+  downloadBytes.innerText = 'Initializing...';
+  downloadPct.innerText = '0%';
+  console.log('[DEBUG] Showing modelDownloadOverlay...', modelDownloadOverlay);
+  modelDownloadOverlay.style.setProperty('display', 'flex', 'important');
+
+  try {
+    const res = await window.api.downloadPiper(customUrl, customVersion);
+    if (res.success) {
+      logStatus(`Piper engine configured successfully at: ${res.path}`, "success");
+      await showAppAlert(`Piper engine downloaded and configured successfully!`);
+      // Update voice lists to reflect potential new path sync
+      await populateVoices();
+    } else {
+      throw new Error(res.error || "Unknown configuration error");
+    }
+  } catch (err) {
+    console.error("Piper deployment failed:", err);
+    logStatus(`Piper Deployment Error: ${err.message}`, "error");
+    await showAppAlert(`Piper setup failed:\n${err.message}`);
+  } finally {
+    console.log('[DEBUG] Hiding modelDownloadOverlay...');
+    modelDownloadOverlay.style.setProperty('display', 'none', 'important');
+    if (descEl) descEl.innerText = originalDesc;
+  }
+}
+
+async function triggerWhisperDownloadFlow(customUrl, customVersion) {
+  console.log('[DEBUG] triggerWhisperDownloadFlow clicked');
+  if (await isDownloadInProgress()) return;
+  if (!customUrl) {
+    const choice = await showAppConfirm("This action will download and extract the prebuilt Whisper.cpp CPU Engine (approx. 8MB) from GitHub directly into your bin/ folder.\n\nAre you sure you want to download and install the Whisper.cpp Engine now?");
+    if (!choice) {
+      console.log('[DEBUG] User cancelled Whisper download prompt');
+      return;
+    }
+  }
+
+  logStatus("Starting Whisper engine download & installation...", "system");
+  downloadTitle.innerText = "Downloading Whisper Engine";
+  const descEl = modelDownloadOverlay.querySelector('p');
+  const originalDesc = descEl ? descEl.innerText : '';
+  if (descEl) {
+    descEl.innerText = "Fetching prebuilt whisper command-line libraries and executables. This may take a few moments.";
+  }
+  downloadProgressBar.style.width = '0%';
+  downloadBytes.innerText = 'Initializing...';
+  downloadPct.innerText = '0%';
+  console.log('[DEBUG] Showing modelDownloadOverlay...', modelDownloadOverlay);
+  modelDownloadOverlay.style.setProperty('display', 'flex', 'important');
+
+  try {
+    const res = await window.api.downloadWhisperEngine(customUrl, customVersion);
+    if (res.success) {
+      logStatus(`Whisper engine configured successfully at: ${res.path}`, "success");
+      await showAppAlert(`Whisper.cpp engine downloaded and configured successfully!`);
+      // Update models list to reflect new paths
+      await syncModels();
+    } else {
+      throw new Error(res.error || "Unknown configuration error");
+    }
+  } catch (err) {
+    console.error("Whisper deployment failed:", err);
+    logStatus(`Whisper Deployment Error: ${err.message}`, "error");
+    await showAppAlert(`Whisper setup failed:\n${err.message}`);
+  } finally {
+    console.log('[DEBUG] Hiding modelDownloadOverlay...');
+    modelDownloadOverlay.style.setProperty('display', 'none', 'important');
+    if (descEl) descEl.innerText = originalDesc;
+  }
+}
+
+async function triggerCheckUpdateFlow() {
+  console.log('[DEBUG] triggerCheckUpdateFlow clicked');
+  logStatus("Checking for updates...", "system");
+  btnCheckUpdate.classList.add('disabled');
+  try {
+    const res = await window.api.checkForUpdates();
+    if (!res.success) {
+      throw new Error(res.error || "Failed to query update statuses");
+    }
+
+    logStatus("Update check completed. Rendering component statuses...", "success");
+
+    const listContainer = document.getElementById('update-components-list');
+    if (!listContainer) return;
+
+    listContainer.innerHTML = '';
+
+    const componentKeys = ['app', 'ffmpeg', 'piper', 'whisper'];
+    const componentDetails = {
+      app: { name: 'SpeechBoleh (App)', icon: 'bi-soundwave', color: 'text-cyan' },
+      ffmpeg: { name: 'FFmpeg Core', icon: 'bi-file-earmark-zip', color: 'text-cyan' },
+      piper: { name: 'Piper TTS Engine', icon: 'bi-soundwave', color: 'text-purple' },
+      whisper: { name: 'Whisper STT Engine', icon: 'bi-translate', color: 'text-cyan' }
+    };
+
+    componentKeys.forEach(key => {
+      const data = res.components[key];
+      const details = componentDetails[key];
+
+      const itemDiv = document.createElement('div');
+      itemDiv.className = 'p-3 bg-dark bg-opacity-50 border border-secondary border-opacity-15 rounded-3 d-flex align-items-center justify-content-between';
+
+      // Badge details & action button
+      let statusBadgeHtml = '';
+      let actionBtnHtml = '';
+
+      if (key === 'app') {
+        if (data.updateAvailable) {
+          statusBadgeHtml = `<span class="badge bg-warning bg-opacity-20 text-warning border border-warning border-opacity-20 px-2.5 py-1.5 rounded-pill"><i class="bi bi-exclamation-triangle-fill me-1"></i>Update Available</span>`;
+          actionBtnHtml = `<button class="btn btn-cyan btn-sm py-1 px-3 rounded-pill" style="font-size: 0.7rem;" id="btn-update-app"><i class="bi bi-box-arrow-up-right me-1"></i>Releases</button>`;
+        } else {
+          statusBadgeHtml = `<span class="badge bg-success bg-opacity-20 text-success border border-success border-opacity-20 px-2.5 py-1.5 rounded-pill"><i class="bi bi-shield-fill-check me-1"></i>Up to Date</span>`;
+          actionBtnHtml = `<button class="btn btn-outline-secondary btn-sm py-1 px-3 rounded-pill disabled" style="font-size: 0.7rem;"><i class="bi bi-check-lg me-1"></i>Latest</button>`;
+        }
+      } else {
+        if (data.local === 'Not Installed') {
+          statusBadgeHtml = `<span class="badge bg-danger bg-opacity-20 text-danger border border-danger border-opacity-20 px-2.5 py-1.5 rounded-pill"><i class="bi bi-exclamation-octagon-fill me-1"></i>Not Installed</span>`;
+          actionBtnHtml = `<button class="btn btn-cyan btn-sm py-1 px-3 rounded-pill action-install-btn" style="font-size: 0.7rem;" data-component="${key}" data-url="${data.url}" data-version="${data.remote}"><i class="bi bi-cloud-arrow-down-fill me-1"></i>Install</button>`;
+        } else if (data.updateAvailable) {
+          statusBadgeHtml = `<span class="badge bg-warning bg-opacity-20 text-warning border border-warning border-opacity-20 px-2.5 py-1.5 rounded-pill"><i class="bi bi-arrow-clockwise me-1"></i>Update Available</span>`;
+          actionBtnHtml = `<button class="btn btn-cyan btn-sm py-1 px-3 rounded-pill action-install-btn" style="font-size: 0.7rem;" data-component="${key}" data-url="${data.url}" data-version="${data.remote}"><i class="bi bi-arrow-down-circle-fill me-1"></i>Update</button>`;
+        } else {
+          statusBadgeHtml = `<span class="badge bg-success bg-opacity-20 text-success border border-success border-opacity-20 px-2.5 py-1.5 rounded-pill"><i class="bi bi-shield-fill-check me-1"></i>Installed</span>`;
+          actionBtnHtml = `<button class="btn btn-outline-secondary btn-sm py-1 px-3 rounded-pill action-install-btn" style="font-size: 0.7rem;" data-component="${key}" data-url="${data.url}" data-version="${data.remote}"><i class="bi bi-arrow-counterclockwise me-1"></i>Reinstall</button>`;
+        }
+      }
+
+      itemDiv.innerHTML = `
+        <div class="d-flex align-items-center gap-3">
+          <div class="rounded-circle p-2 bg-secondary bg-opacity-10 d-flex align-items-center justify-content-center" style="width: 38px; height: 38px;">
+            <i class="bi ${details.icon} ${details.color} fs-5"></i>
+          </div>
+          <div>
+            <h6 class="m-0 fw-bold text-white">${details.name}</h6>
+            <span class="small text-secondary" style="font-size: 0.7rem;">Local: <strong>${data.local}</strong> | Latest: <strong>${data.remote}</strong></span>
+          </div>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+          ${statusBadgeHtml}
+          ${actionBtnHtml}
+        </div>
+      `;
+
+      listContainer.appendChild(itemDiv);
+      
+      // Wire click for App Releases button if created
+      if (key === 'app' && data.updateAvailable) {
+        const updateAppBtn = itemDiv.querySelector('#btn-update-app');
+        if (updateAppBtn) {
+          updateAppBtn.addEventListener('click', () => {
+            window.api.openExternalUrl(data.url);
+          });
+        }
+      }
+    });
+
+    // Wire up events on dynamically generated install buttons
+    const updateModalEl = document.getElementById('updateModal');
+    const updateModal = bootstrap.Modal.getOrCreateInstance(updateModalEl);
+    
+    listContainer.querySelectorAll('.action-install-btn').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        const comp = btn.getAttribute('data-component');
+        const dlUrl = btn.getAttribute('data-url');
+        const dlVersion = btn.getAttribute('data-version');
+
+        console.log(`Triggering download for component: ${comp}, url: ${dlUrl}, version: ${dlVersion}`);
+        
+        // Close update modal first
+        updateModal.hide();
+
+        if (comp === 'ffmpeg') {
+          await triggerFfmpegDownloadFlow(dlUrl, dlVersion);
+        } else if (comp === 'piper') {
+          await triggerPiperDownloadFlow(dlUrl, dlVersion);
+        } else if (comp === 'whisper') {
+          await triggerWhisperDownloadFlow(dlUrl, dlVersion);
+        }
+      });
+    });
+
+    updateModal.show();
+
+  } catch (err) {
+    console.error("Update check failed:", err);
+    logStatus(`Update Check Error: ${err.message}`, "error");
+    await showAppAlert(`Failed to check for updates:\n${err.message}`);
+  } finally {
+    btnCheckUpdate.classList.remove('disabled');
+  }
+}
+
 // ----------------------------------------------------
 // STT: Whisper Model Syncing & Downloading
 // ----------------------------------------------------
@@ -262,14 +816,20 @@ async function syncModels() {
   }
 }
 
-async function handleModelChange() {
+async function ensureModelDownloaded() {
   const targetModel = modelSelect.value;
-  logStatus(`Whisper model switch requested: ${targetModel}`);
+  try {
+    const available = await window.api.getAvailableModels();
+    availableModels = available || [];
+  } catch (syncErr) {
+    console.warn('[Model Check Warning] Failed to fetch downloaded models:', syncErr);
+  }
 
   const isDownloaded = availableModels.includes(targetModel);
   if (!isDownloaded) {
+    if (await isDownloadInProgress()) return false;
     // Show download UI
-    modelDownloadOverlay.style.display = 'flex';
+    modelDownloadOverlay.style.setProperty('display', 'flex', 'important');
     downloadTitle.innerText = `Downloading ${targetModel === 'ggml-tiny.bin' ? 'Tiny Model' : 'Base Model'}`;
     downloadProgressBar.style.width = '0%';
     downloadBytes.innerText = '0 / 0 MB';
@@ -292,18 +852,29 @@ async function handleModelChange() {
       if (res.success) {
         logStatus(`Model ${targetModel} downloaded successfully.`);
         await syncModels();
+        return true;
       } else {
         throw new Error(res.error || 'Server connection error during model download');
       }
     } catch (err) {
       console.error('[Model Download Error]', err);
-      alert(`Model Download Failed:\n${err.message}\nReverting selection.`);
-      modelSelect.value = currentModel;
-      modelDownloadOverlay.style.display = 'none';
-      return;
+      await showAppAlert(`Model Download Failed:\n${err.message}`);
+      return false;
     } finally {
-      modelDownloadOverlay.style.display = 'none';
+      modelDownloadOverlay.style.setProperty('display', 'none', 'important');
     }
+  }
+  return true;
+}
+
+async function handleModelChange() {
+  const targetModel = modelSelect.value;
+  logStatus(`Whisper model switch requested: ${targetModel}`);
+
+  const isReady = await ensureModelDownloaded();
+  if (!isReady) {
+    modelSelect.value = currentModel;
+    return;
   }
 
   // Swap active model inside Main process
@@ -317,7 +888,7 @@ async function handleModelChange() {
     }
   } catch (err) {
     console.error(err);
-    alert(`Failed to set model:\n${err.message}`);
+    await showAppAlert(`Failed to set model:\n${err.message}`);
     modelSelect.value = currentModel;
   }
 }
@@ -366,6 +937,24 @@ function setupEventListeners() {
   // Copy to clipboard
   btnCopyStt.addEventListener('click', copyTranscriptToClipboard);
   btnFullscreenStt.addEventListener('click', toggleSttFullscreen);
+
+  // Download local engines from UI dropdown options
+  btnDownloadFfmpegUi.addEventListener('click', (e) => {
+    e.preventDefault();
+    triggerFfmpegDownloadFlow();
+  });
+  btnDownloadPiperUi.addEventListener('click', (e) => {
+    e.preventDefault();
+    triggerPiperDownloadFlow();
+  });
+  btnDownloadWhisperUi.addEventListener('click', (e) => {
+    e.preventDefault();
+    triggerWhisperDownloadFlow();
+  });
+  btnCheckUpdate.addEventListener('click', (e) => {
+    e.preventDefault();
+    triggerCheckUpdateFlow();
+  });
 
   // Clear activity logs
   btnClearLogs.addEventListener('click', () => {
@@ -431,6 +1020,82 @@ function setupEventListeners() {
   audioPlayback.addEventListener('loadedmetadata', updateAudioPlayerMetadata);
   audioPlayback.addEventListener('ended', onAudioPlaybackEnded);
   playerProgressArea.addEventListener('click', seekAudioPlayback);
+
+  // Listen to menu bar triggers to download FFmpeg
+  window.api.onTriggerFfmpegDownload(() => {
+    triggerFfmpegDownloadFlow();
+  });
+
+  // Listen to download progress status events
+  window.api.onFfmpegProgress((data) => {
+    logStatus(`[FFmpeg Downloader] ${data.msg}`);
+
+    // Update progress overlay visuals dynamically
+    downloadTitle.innerText = 'Downloading FFmpeg';
+    downloadProgressBar.style.width = `${data.progress}%`;
+    downloadPct.innerText = `${data.progress}%`;
+    downloadBytes.innerText = data.msg;
+  });
+
+  // Listen to menu bar triggers to download Piper
+  window.api.onTriggerPiperDownload(() => {
+    triggerPiperDownloadFlow();
+  });
+
+  window.api.onPiperProgress((data) => {
+    logStatus(`[Piper Downloader] ${data.msg}`);
+    downloadTitle.innerText = 'Downloading Piper Engine';
+    downloadProgressBar.style.width = `${data.progress}%`;
+    downloadPct.innerText = `${data.progress}%`;
+    downloadBytes.innerText = data.msg;
+  });
+
+  // Listen to menu bar triggers to download Whisper engine
+  window.api.onTriggerWhisperDownload(() => {
+    triggerWhisperDownloadFlow();
+  });
+
+  window.api.onWhisperProgress((data) => {
+    logStatus(`[Whisper Downloader] ${data.msg}`);
+    downloadTitle.innerText = 'Downloading Whisper Engine';
+    downloadProgressBar.style.width = `${data.progress}%`;
+    downloadPct.innerText = `${data.progress}%`;
+    downloadBytes.innerText = data.msg;
+  });
+
+  // Custom Window Controls listeners
+  titleBarMinimize.addEventListener('click', () => {
+    window.api.minimizeWindow();
+  });
+
+  titleBarMaximize.addEventListener('click', () => {
+    window.api.maximizeWindow();
+  });
+
+  titleBarClose.addEventListener('click', () => {
+    window.api.closeWindow();
+  });
+
+  // Handle changing maximize icon state from the main process events
+  window.api.onWindowMaximizedState((isMaximized) => {
+    if (isMaximized) {
+      maximizeIcon.className = 'bi bi-back';
+    } else {
+      maximizeIcon.className = 'bi bi-square';
+    }
+  });
+
+  // Settings & Info click listeners
+  if (titleBarSettings) {
+    titleBarSettings.addEventListener('click', () => {
+      logStatus('Settings toggled from title bar.', 'system');
+      alert('Settings panel under active development for SpeechBoleh Beta!');
+    });
+  }
+
+  titleBarInfo.addEventListener('click', () => {
+    logStatus('About dialog opened from title bar.', 'system');
+  });
 }
 
 // ----------------------------------------------------
@@ -505,6 +1170,14 @@ async function startRecording() {
 
         logStatus(`Mic data captured (${formatBytes(audioBlob.size)}). Running local Whisper.cpp...`, 'system');
 
+        // Check/Download model first if selected model is missing
+        sttLoadingOverlay.style.display = 'none';
+        const isModelReady = await ensureModelDownloaded();
+        sttLoadingOverlay.style.display = 'flex';
+        if (!isModelReady) {
+          throw new Error('Required Whisper model file is not downloaded.');
+        }
+
         // 2. Process transcription pipeline
         const transRes = await window.api.sttTranscribe(rawMicPath);
 
@@ -521,7 +1194,7 @@ async function startRecording() {
       } catch (err) {
         console.error('Mic STT processing error:', err);
         logStatus(`STT Error: ${err.message}`, 'error');
-        alert(`Speech-to-Text Pipeline Failed:\n${err.message}`);
+        await showAppAlert(`Speech-to-Text Pipeline Failed:\n${err.message}`);
       } finally {
         sttLoadingOverlay.style.display = 'none';
       }
@@ -550,7 +1223,7 @@ async function startRecording() {
   } catch (err) {
     console.error('Failed to get mic access', err);
     logStatus(`Permissions error: ${err.message}`);
-    alert(`Microphone Permission Blocked:\nEnsure permission check handlers are active in main.js. Details: ${err.message}`);
+    await showAppAlert(`Microphone Permission Blocked:\nEnsure permission check handlers are active in main.js. Details: ${err.message}`);
   }
 }
 
@@ -645,6 +1318,14 @@ async function processAudioUpload() {
       throw new Error('Local file system path could not be resolved');
     }
 
+    // Check/Download model first if selected model is missing
+    sttLoadingOverlay.style.display = 'none';
+    const isModelReady = await ensureModelDownloaded();
+    sttLoadingOverlay.style.display = 'flex';
+    if (!isModelReady) {
+      throw new Error('Required Whisper model file is not downloaded.');
+    }
+
     const res = await window.api.sttTranscribe(localFilePath);
     if (res.success) {
       updateSttOutput(res.text);
@@ -655,7 +1336,7 @@ async function processAudioUpload() {
   } catch (err) {
     console.error('Audio file STT error:', err);
     logStatus(`STT Error: ${err.message}`, 'error');
-    alert(`Speech-to-Text Pipeline Failed:\n${err.message}`);
+    await showAppAlert(`Speech-to-Text Pipeline Failed:\n${err.message}`);
   } finally {
     sttLoadingOverlay.style.display = 'none';
   }
@@ -749,7 +1430,7 @@ function toggleTtsFullscreen() {
 // ----------------------------------------------------
 async function handleTextFileImport(file) {
   if (file.type !== 'text/plain' && !file.name.endsWith('.txt')) {
-    alert('Please import a valid plain text file (.txt).');
+    await showAppAlert('Please import a valid plain text file (.txt).');
     return;
   }
 
@@ -813,7 +1494,7 @@ async function synthesizeText() {
   const selectedVoice = voiceSelect.value;
 
   if (!text) {
-    alert('Please enter or import text to synthesize!');
+    await showAppAlert('Please enter or import text to synthesize!');
     return;
   }
 
@@ -866,7 +1547,7 @@ async function synthesizeText() {
   } catch (err) {
     console.error('TTS Synthesis error:', err);
     logStatus(`TTS Error: ${err.message}`, 'error');
-    alert(`Text-to-Speech Engine Failed:\n${err.message}`);
+    await showAppAlert(`Text-to-Speech Engine Failed:\n${err.message}`);
   } finally {
     ttsLoadingOverlay.style.display = 'none';
   }

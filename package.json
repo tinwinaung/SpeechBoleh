@@ -1,6 +1,6 @@
 {
   "name": "SpeechBoleh",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Local Speech-to-Text and Text-to-Speech Desktop Application",
   "main": "main.js",
   "scripts": {
@@ -13,7 +13,7 @@
     "tts",
     "whisper"
   ],
-  "author": "Antigravity",
+  "author": "TIN WIN AUNG",
   "license": "ISC",
   "dependencies": {
     "fluent-ffmpeg": "^2.1.3"
@@ -39,8 +39,6 @@
       "index.html",
       "index.css",
       "assets/**/*",
-      "bin/**/*",
-      "!bin/**/*.zip",
       "node_modules/**/*"
     ],
     "win": {
@@ -48,11 +46,25 @@
         "nsis",
         "portable"
       ],
-      "icon": "assets/ico512.png"
+      "icon": "assets/soundwave_512.png"
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true
+    }
+  },
+  "pkg": {
+    "ffmpeg": {
+      "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip",
+      "version": "latest"
+    },
+    "piper": {
+      "url": "https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_windows_amd64.zip",
+      "version": "latest"
+    },
+    "whisper": {
+      "url": "https://github.com/ggml-org/whisper.cpp/releases/download/v1.9.1/whisper-bin-x64.zip",
+      "version": "latest"
     }
   }
 }

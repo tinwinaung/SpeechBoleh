@@ -1,7 +1,8 @@
-const { app, BrowserWindow, ipcMain, session, protocol, net, clipboard } = require('electron');
+const { app, BrowserWindow, ipcMain, session, protocol, net, clipboard, Menu, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const https = require('https');
+const http = require('http');
 const { exec, execFile, execSync, spawn } = require('child_process');
 const { pathToFileURL } = require('url');
 const ffmpeg = require('fluent-ffmpeg');
@@ -84,6 +85,26 @@ function configureFfmpeg() {
 
 configureFfmpeg();
 
+function hasValidFfmpeg() {
+  const localBinPath = getAssetPath('bin', 'ffmpeg', 'bin', 'ffmpeg.exe');
+  if (fs.existsSync(localBinPath)) return true;
+
+  try {
+    const whereOutput = execSync('where ffmpeg', { encoding: 'utf8' }).trim();
+    const firstPath = whereOutput.split('\r\n')[0];
+    if (firstPath && fs.existsSync(firstPath)) return true;
+  } catch (e) {}
+
+  const possiblePaths = [
+    path.join(process.env.USERPROFILE || 'C:\\Users\\TINWINAUNG', 'AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-8.1.2-full_build\\bin\\ffmpeg.exe'),
+    'C:\\ffmpeg\\bin\\ffmpeg.exe'
+  ];
+  for (const p of possiblePaths) {
+    if (fs.existsSync(p)) return true;
+  }
+  return false;
+}
+
 // ----------------------------------------------------
 // Clean up all temporary files in tmp folder
 // ----------------------------------------------------
@@ -92,7 +113,17 @@ function cleanupTempFiles() {
     if (fs.existsSync(tmpDir)) {
       const files = fs.readdirSync(tmpDir);
       for (const file of files) {
-        fs.unlinkSync(path.join(tmpDir, file));
+        const filePath = path.join(tmpDir, file);
+        try {
+          const stat = fs.statSync(filePath);
+          if (stat.isDirectory()) {
+            fs.rmSync(filePath, { recursive: true, force: true });
+          } else {
+            fs.unlinkSync(filePath);
+          }
+        } catch (fileErr) {
+          console.warn(`[Cleanup] Failed to remove ${file}:`, fileErr.message);
+        }
       }
       console.log('[Cleanup] Temporary files successfully purged.');
     }
@@ -114,21 +145,50 @@ function createWindow() {
       webSecurity: true // Keeps the application secure while custom media protocol handles audio loading
     },
     title: "Local STT & TTS Pipeline Client",
-    autoHideMenuBar: true
+    autoHideMenuBar: true,
+    frame: false
   });
 
+  mainWindow.setMenu(null);
   mainWindow.loadFile('index.html');
+
+  mainWindow.on('maximize', () => {
+    mainWindow.webContents.send('window-maximized-state', true);
+  });
+
+  mainWindow.on('unmaximize', () => {
+    mainWindow.webContents.send('window-maximized-state', false);
+  });
 
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
 }
 
+// IPC: Custom Window Control Actions
+ipcMain.on('window-minimize', () => {
+  if (mainWindow) mainWindow.minimize();
+});
+
+ipcMain.on('window-maximize', () => {
+  if (mainWindow) {
+    if (mainWindow.isMaximized()) {
+      mainWindow.unmaximize();
+    } else {
+      mainWindow.maximize();
+    }
+  }
+});
+
+ipcMain.on('window-close', () => {
+  if (mainWindow) mainWindow.close();
+});
+
 // ----------------------------------------------------
 // Microsoft Visual C++ Redistributable Checker
 // ----------------------------------------------------
 function checkAndInstallMsvc() {
-  if (process.platform !== 'win32') return;
+  if (process.platform !== 'win32') return Promise.resolve();
 
   const { dialog } = require('electron');
   let isInstalled = false;
@@ -143,7 +203,7 @@ function checkAndInstallMsvc() {
 
   if (isInstalled) {
     console.log('[System] Microsoft Visual C++ Redistributable runtime check passed.');
-    return;
+    return Promise.resolve();
   }
 
   const redistLocalPath = getAssetPath('bin', 'vc_redist.x64.exe');
@@ -167,8 +227,9 @@ function checkAndInstallMsvc() {
     });
 
     if (choice === 0) {
-      launchInstaller(finalRedistPath);
+      return launchInstaller(finalRedistPath);
     }
+    return Promise.resolve();
   } else {
     // Both installer files are missing. Offer to download.
     const choice = dialog.showMessageBoxSync({
@@ -184,7 +245,7 @@ function checkAndInstallMsvc() {
       console.log('[System] Downloading VC++ Redistributable installer...');
       const downloadUrl = 'https://aka.ms/vs/17/release/vc_redist.x64.exe';
       
-      downloadUrlToFile(downloadUrl, redistTempPath)
+      return downloadUrlToFile(downloadUrl, redistTempPath)
         .then(() => {
           console.log('[System] VC++ Redistributable download complete.');
           const installChoice = dialog.showMessageBoxSync({
@@ -195,8 +256,9 @@ function checkAndInstallMsvc() {
             message: 'The Microsoft Visual C++ Redistributable installer was downloaded successfully. Would you like to run it now?'
           });
           if (installChoice === 0) {
-            launchInstaller(redistTempPath);
+            return launchInstaller(redistTempPath);
           }
+          return Promise.resolve();
         })
         .catch((err) => {
           console.error('[System] Failed to download VC++ Redistributable:', err);
@@ -204,30 +266,61 @@ function checkAndInstallMsvc() {
             'Download Failed',
             `Failed to download the VC++ Redistributable installer:\n${err.message}\n\nPlease install it manually from: https://aka.ms/vs/17/release/vc_redist.x64.exe`
           );
+          return Promise.resolve();
         });
     }
+    return Promise.resolve();
   }
 }
 
 function launchInstaller(exePath) {
-  console.log(`[System] Launching VC++ Redistributable installer: ${exePath}`);
-  try {
-    const child = spawn(exePath, [], {
-      detached: true,
-      stdio: 'ignore'
-    });
-    child.unref();
-  } catch (spawnErr) {
-    console.error('[System] Failed to launch redistributable installer:', spawnErr);
-  }
+  return new Promise((resolve) => {
+    console.log(`[System] Launching VC++ Redistributable installer: ${exePath}`);
+    try {
+      // Minimize the application main window
+      if (mainWindow) {
+        mainWindow.minimize();
+      }
+
+      const child = spawn(exePath, [], {
+        stdio: 'ignore'
+      });
+
+      child.on('close', (code) => {
+        console.log(`[System] VC++ Redistributable installer process closed with code ${code}`);
+        // Restore and focus the application window when setup completes
+        if (mainWindow) {
+          mainWindow.restore();
+          mainWindow.focus();
+        }
+        resolve();
+      });
+
+      child.on('error', (err) => {
+        console.error('[System] VC++ Redistributable installer process error:', err);
+        if (mainWindow) {
+          mainWindow.restore();
+          mainWindow.focus();
+        }
+        resolve();
+      });
+    } catch (spawnErr) {
+      console.error('[System] Failed to launch redistributable installer:', spawnErr);
+      if (mainWindow) {
+        mainWindow.restore();
+        mainWindow.focus();
+      }
+      resolve();
+    }
+  });
 }
 
 // ----------------------------------------------------
 // Auto-Granting Media Permissions inside Electron
 // ----------------------------------------------------
-app.whenReady().then(() => {
-  // Check and prompt for MSVC Redistributable on Windows
-  checkAndInstallMsvc();
+app.whenReady().then(async () => {
+  // Clean up any stale files from previous run on startup
+  cleanupTempFiles();
 
   // Set up safe local media streaming protocol
   protocol.handle('media', (request) => {
@@ -253,10 +346,15 @@ app.whenReady().then(() => {
     }
   });
 
+  // Check and prompt for MSVC Redistributable on Windows before opening window
+  await checkAndInstallMsvc();
+
   createWindow();
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createWindow();
+    }
   });
 });
 
@@ -265,6 +363,10 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
   }
+});
+
+app.on('will-quit', () => {
+  cleanupTempFiles();
 });
 
 // ----------------------------------------------------
@@ -333,7 +435,7 @@ ipcMain.handle('audio-stt', async (event, inputPath) => {
     // 3. Clean up transcoded file immediately
     try {
       if (fs.existsSync(transOutPath)) {
-        //fs.unlinkSync(transOutPath);
+        fs.unlinkSync(transOutPath);
       }
     } catch (cleanErr) {
       console.warn('[Cleanup] Failed to remove transcode file:', cleanErr);
@@ -345,7 +447,7 @@ ipcMain.handle('audio-stt', async (event, inputPath) => {
     // Cleanup on failure
     try {
       if (fs.existsSync(transOutPath)) {
-        //fs.unlinkSync(transOutPath);
+        fs.unlinkSync(transOutPath);
       }
     } catch (e) { }
     return { success: false, error: error.message };
@@ -453,6 +555,32 @@ ipcMain.handle('read-clipboard', async () => {
   }
 });
 
+// IPC: Check core dependencies and runtime status
+ipcMain.handle('check-dependencies', async () => {
+  const localFfmpeg = getAssetPath('bin', 'ffmpeg', 'bin', 'ffmpeg.exe');
+  const piperExe = getAssetPath('bin', 'piper', 'piper', 'piper.exe');
+  const whisperCli = getAssetPath('bin', 'whisper', 'Release', 'whisper-cli.exe');
+  
+  const ffmpegVal = fs.existsSync(localFfmpeg);
+  const piperVal = fs.existsSync(piperExe);
+  const whisperVal = fs.existsSync(whisperCli);
+
+  console.log('[Dependencies Check Log]', {
+    ffmpeg: ffmpegVal,
+    ffmpegExePath: localFfmpeg,
+    piperEngine: piperVal,
+    piperExePath: piperExe,
+    whisperEngine: whisperVal,
+    whisperCliPath: whisperCli
+  });
+
+  return {
+    ffmpeg: ffmpegVal,
+    piperEngine: piperVal,
+    whisperEngine: whisperVal
+  };
+});
+
 // IPC: Read Uploaded Text File content
 ipcMain.handle('read-text-file', async (event, filePath) => {
   try {
@@ -479,6 +607,152 @@ ipcMain.handle('delete-file', async (event, filePath) => {
     console.warn('[IPC Delete File Warning]', error);
     return { success: false, error: error.message };
   }
+});
+
+// Helper: Update a component's config in the local package.json file
+function updateLocalPackageJson(component, url, version) {
+  try {
+    const pkgPath = path.join(__dirname, 'package.json');
+    if (fs.existsSync(pkgPath)) {
+      const data = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+      if (!data.pkg) data.pkg = {};
+      if (!data.pkg[component]) data.pkg[component] = {};
+      data.pkg[component].url = url;
+      data.pkg[component].version = version;
+      fs.writeFileSync(pkgPath, JSON.stringify(data, null, 2), 'utf8');
+      console.log(`[package.json] Dynamic update successful for ${component} to version ${version}`);
+    }
+  } catch (err) {
+    console.error(`[package.json] Dynamic update failed for ${component}:`, err);
+  }
+}
+
+// Helper: Check if remote version is larger than local version
+function isVersionNewer(local, remote) {
+  const localParts = String(local).split('-')[0].split('.').map(Number);
+  const remoteParts = String(remote).split('-')[0].split('.').map(Number);
+  for (let i = 0; i < 3; i++) {
+    const localPart = localParts[i] || 0;
+    const remotePart = remoteParts[i] || 0;
+    if (remotePart > localPart) return true;
+    if (localPart > remotePart) return false;
+  }
+  return false;
+}
+
+// IPC: Check for updates online from GitHub package.json
+ipcMain.handle('check-for-updates', async () => {
+  const localVersion = app.getVersion();
+  
+  // 1. Get binary presence statuses
+  const localFfmpeg = getAssetPath('bin', 'ffmpeg', 'bin', 'ffmpeg.exe');
+  const piperExe = getAssetPath('bin', 'piper', 'piper', 'piper.exe');
+  const whisperCli = getAssetPath('bin', 'whisper', 'Release', 'whisper-cli.exe');
+  
+  const ffmpegInstalled = fs.existsSync(localFfmpeg);
+  const piperInstalled = fs.existsSync(piperExe);
+  const whisperInstalled = fs.existsSync(whisperCli);
+
+  // 2. Read local package.json config
+  let localPkg = { pkg: {} };
+  try {
+    const pkgPath = path.join(__dirname, 'package.json');
+    if (fs.existsSync(pkgPath)) {
+      localPkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+    }
+  } catch (err) {
+    console.error('Failed to read local package.json:', err);
+  }
+
+  const getLocalComponentVersion = (name, installed) => {
+    if (!installed) return 'Not Installed';
+    return (localPkg.pkg && localPkg.pkg[name] && localPkg.pkg[name].version) || 'latest';
+  };
+
+  const ffmpegLocalVersion = getLocalComponentVersion('ffmpeg', ffmpegInstalled);
+  const piperLocalVersion = getLocalComponentVersion('piper', piperInstalled);
+  const whisperLocalVersion = getLocalComponentVersion('whisper', whisperInstalled);
+
+  try {
+    // 3. Fetch remote package.json
+    const response = await fetch('https://raw.githubusercontent.com/tinwinaung/SpeechBoleh/main/package.json');
+    if (!response.ok) {
+      throw new Error(`Failed to fetch online package.json (status ${response.status})`);
+    }
+    const data = await response.json();
+    const remoteVersion = data.version;
+    if (!remoteVersion) {
+      throw new Error('Version field not found in remote package.json');
+    }
+
+    const appUpdateAvailable = isVersionNewer(localVersion, remoteVersion);
+
+    // 4. Get remote component configs
+    const getRemoteComponentData = (name, localVer) => {
+      const remoteData = (data.pkg && data.pkg[name]) || { version: 'latest', url: '' };
+      const remoteVer = remoteData.version || 'latest';
+      const url = remoteData.url || '';
+      
+      let updateAvailable = false;
+      if (localVer === 'Not Installed') {
+        updateAvailable = true;
+      } else if (localVer === 'latest' && remoteVer === 'latest') {
+        updateAvailable = false;
+      } else if (localVer !== 'latest' && remoteVer === 'latest') {
+        // Local version is number, online version is latest
+        updateAvailable = true;
+      } else if (localVer === 'latest' && remoteVer !== 'latest') {
+        // Local version is latest, online version is number
+        updateAvailable = true;
+      } else {
+        // Both local and remote are version numbers
+        updateAvailable = isVersionNewer(localVer, remoteVer);
+      }
+
+      return {
+        local: localVer,
+        remote: remoteVer,
+        updateAvailable,
+        url
+      };
+    };
+
+    const result = {
+      success: true,
+      components: {
+        app: {
+          local: localVersion,
+          remote: remoteVersion,
+          updateAvailable: appUpdateAvailable,
+          url: 'https://github.com/tinwinaung/SpeechBoleh/releases'
+        },
+        ffmpeg: getRemoteComponentData('ffmpeg', ffmpegLocalVersion),
+        piper: getRemoteComponentData('piper', piperLocalVersion),
+        whisper: getRemoteComponentData('whisper', whisperLocalVersion)
+      }
+    };
+
+    return result;
+  } catch (err) {
+    console.error('[Update Check Error]', err);
+    return { success: false, error: err.message };
+  }
+});
+
+// IPC: Open external link in default browser
+ipcMain.handle('open-external-url', async (event, url) => {
+  try {
+    shell.openExternal(url);
+    return { success: true };
+  } catch (err) {
+    console.error('Failed to open external URL:', err);
+    return { success: false, error: err.message };
+  }
+});
+
+// IPC: Get local app version from package.json
+ipcMain.handle('get-app-version', () => {
+  return app.getVersion();
 });
 
 // IPC: Get downloaded Piper ONNX models inside the bin path for TTS dropdown populate
@@ -532,9 +806,21 @@ ipcMain.handle('download-model', async (event, modelName) => {
     const file = fs.createWriteStream(tempDestPath);
 
     function startDownload(downloadUrl) {
-      const request = https.get(downloadUrl, (response) => {
-        // Handle redirects (Hugging Face redirects download links with 301, 302, 307, or 308)
-        if ([301, 302, 307, 308].includes(response.statusCode)) {
+      const client = downloadUrl.startsWith('https') ? https : http;
+      const parsedUrl = new URL(downloadUrl);
+      const options = {
+        protocol: parsedUrl.protocol,
+        hostname: parsedUrl.hostname,
+        port: parsedUrl.port,
+        path: parsedUrl.pathname + parsedUrl.search,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
+      };
+
+      const request = client.get(options, (response) => {
+        // Handle redirects (Hugging Face redirects download links with 301, 302, 303, 307, or 308)
+        if ([301, 302, 303, 307, 308].includes(response.statusCode)) {
           const redirectUrl = new URL(response.headers.location, downloadUrl).toString();
           console.log(`[Model Downloader] Following redirect to: ${redirectUrl}`);
           startDownload(redirectUrl);
@@ -543,7 +829,11 @@ ipcMain.handle('download-model', async (event, modelName) => {
 
         if (response.statusCode !== 200) {
           file.close();
-          if (fs.existsSync(tempDestPath)) fs.unlinkSync(tempDestPath);
+          try {
+            if (fs.existsSync(tempDestPath)) fs.unlinkSync(tempDestPath);
+          } catch (unlinkErr) {
+            console.warn('[Model Downloader] Failed to delete temp file:', unlinkErr.message);
+          }
           return resolve({ success: false, error: `Server returned status code: ${response.statusCode}` });
         }
 
@@ -568,6 +858,7 @@ ipcMain.handle('download-model', async (event, modelName) => {
         file.on('finish', () => {
           file.close();
           try {
+            if (fs.existsSync(destPath)) fs.unlinkSync(destPath);
             fs.renameSync(tempDestPath, destPath);
             console.log(`[Model Downloader] Successfully downloaded and saved model to: ${destPath}`);
             resolve({ success: true });
@@ -580,7 +871,11 @@ ipcMain.handle('download-model', async (event, modelName) => {
 
       request.on('error', (err) => {
         file.close();
-        if (fs.existsSync(tempDestPath)) fs.unlinkSync(tempDestPath);
+        try {
+          if (fs.existsSync(tempDestPath)) fs.unlinkSync(tempDestPath);
+        } catch (unlinkErr) {
+          console.warn('[Model Downloader] Failed to delete temp file on error:', unlinkErr.message);
+        }
         console.error('[Model Downloader] Request error:', err);
         resolve({ success: false, error: err.message });
       });
@@ -590,22 +885,40 @@ ipcMain.handle('download-model', async (event, modelName) => {
   });
 });
 
-// Helper to download files (with redirect support and progress)
+// Helper to download files (with redirect support, user agent, protocol-agnostic, and progress)
 function downloadUrlToFile(downloadUrl, destPath, onProgress) {
   return new Promise((resolve, reject) => {
     const tempDestPath = destPath + '.tmp';
-    const file = fs.createWriteStream(tempDestPath);
+    let file = fs.createWriteStream(tempDestPath);
+    let requestObj = null;
 
     function startDownload(url) {
-      const request = https.get(url, (response) => {
-        if ([301, 302, 307, 308].includes(response.statusCode)) {
+      const client = url.startsWith('https') ? https : http;
+      const parsedUrl = new URL(url);
+      
+      const options = {
+        protocol: parsedUrl.protocol,
+        hostname: parsedUrl.hostname,
+        port: parsedUrl.port,
+        path: parsedUrl.pathname + parsedUrl.search,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
+      };
+
+      requestObj = client.get(options, (response) => {
+        if ([301, 302, 303, 307, 308].includes(response.statusCode)) {
           const redirectUrl = new URL(response.headers.location, url).toString();
           startDownload(redirectUrl);
           return;
         }
         if (response.statusCode !== 200) {
           file.close();
-          if (fs.existsSync(tempDestPath)) fs.unlinkSync(tempDestPath);
+          try {
+            if (fs.existsSync(tempDestPath)) fs.unlinkSync(tempDestPath);
+          } catch (unlinkErr) {
+            console.warn('[Downloader] Failed to delete temp file:', unlinkErr.message);
+          }
           return reject(new Error(`Server returned ${response.statusCode}`));
         }
 
@@ -624,6 +937,7 @@ function downloadUrlToFile(downloadUrl, destPath, onProgress) {
         file.on('finish', () => {
           file.close();
           try {
+            if (fs.existsSync(destPath)) fs.unlinkSync(destPath);
             fs.renameSync(tempDestPath, destPath);
             resolve();
           } catch (err) {
@@ -632,9 +946,13 @@ function downloadUrlToFile(downloadUrl, destPath, onProgress) {
         });
       });
 
-      request.on('error', (err) => {
+      requestObj.on('error', (err) => {
         file.close();
-        if (fs.existsSync(tempDestPath)) fs.unlinkSync(tempDestPath);
+        try {
+          if (fs.existsSync(tempDestPath)) fs.unlinkSync(tempDestPath);
+        } catch (unlinkErr) {
+          console.warn('[Downloader] Failed to delete temp file on error:', unlinkErr.message);
+        }
         reject(err);
       });
     }
@@ -689,3 +1007,463 @@ ipcMain.handle('download-voice-model', async (event, voiceName) => {
     return { success: false, error: err.message };
   }
 });
+
+// IPC: Download latest FFmpeg build from gyan.dev
+ipcMain.handle('download-ffmpeg', async (event, customUrl, customVersion) => {
+  const ffmpegBaseDir = getAssetPath('bin', 'ffmpeg');
+  const ffmpegBaseDirBak = ffmpegBaseDir + '_bak';
+  const ffmpegZipDest = path.join(tmpDir, 'ffmpeg.zip');
+  const extractTempDir = path.join(tmpDir, 'ffmpeg_extracted');
+  const ffmpegTargetDir = getAssetPath('bin', 'ffmpeg', 'bin');
+  const ffmpegFinalPath = path.join(ffmpegTargetDir, 'ffmpeg.exe');
+
+  // URL for latest stable essentials build from gyan.dev, with a reliable fallback GitHub release mirror
+  const ffmpegUrl = 'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip';
+  const ffmpegFallbackUrl = 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip';
+
+  let backedUp = false;
+
+  try {
+    // 1. Ensure temp directory exists
+    if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+
+    // 2. Perform backup of the existing folder
+    if (fs.existsSync(ffmpegBaseDir)) {
+      sendStatus('Backing up existing FFmpeg configuration...', 0);
+      if (fs.existsSync(ffmpegBaseDirBak)) {
+        fs.rmSync(ffmpegBaseDirBak, { recursive: true, force: true });
+      }
+      fs.renameSync(ffmpegBaseDir, ffmpegBaseDirBak);
+      backedUp = true;
+    }
+
+    // 3. Ensure target directory exists for new download
+    if (!fs.existsSync(ffmpegTargetDir)) fs.mkdirSync(ffmpegTargetDir, { recursive: true });
+
+    // 4. Clean up any previous extraction directories
+    if (fs.existsSync(extractTempDir)) {
+      fs.rmSync(extractTempDir, { recursive: true, force: true });
+    }
+
+    // Send initial status update
+    sendStatus('Downloading latest FFmpeg essentials release (approx. 90MB)...', 0);
+
+    // 5. Download the zip file with primary/fallback try-catch
+    try {
+      const downloadLink = customUrl || ffmpegUrl;
+      await downloadUrlToFile(downloadLink, ffmpegZipDest, (downloaded, total) => {
+        const percentage = total ? Math.round((downloaded / total) * 100) : 0;
+        sendStatus(`Downloading FFmpeg archive: ${percentage}%`, percentage);
+      });
+    } catch (primaryErr) {
+      if (customUrl) {
+        throw primaryErr; // Propagate error for specific custom URL downloads
+      }
+      console.warn('[FFmpeg Downloader] Primary download link refused connection. Attempting backup mirror...', primaryErr);
+      sendStatus('Primary mirror connection refused. Accessing backup download mirror (approx. 100MB)...', 0);
+      
+      await downloadUrlToFile(ffmpegFallbackUrl, ffmpegZipDest, (downloaded, total) => {
+        const percentage = total ? Math.round((downloaded / total) * 100) : 0;
+        sendStatus(`Downloading FFmpeg (Backup Mirror): ${percentage}%`, percentage);
+      });
+    }
+
+    // 6. Extract the zip file using PowerShell Expand-Archive (native to Windows)
+    sendStatus('Extracting zip archive using PowerShell...', 100);
+    const extractCmd = `powershell -Command "Expand-Archive -Path '${ffmpegZipDest}' -DestinationPath '${extractTempDir}' -Force"`;
+    
+    await new Promise((resolve, reject) => {
+      exec(extractCmd, (err, stdout, stderr) => {
+        if (err) {
+          console.error('[FFmpeg Extraction Error]', err, stderr);
+          reject(new Error(`Extraction failed: ${stderr || err.message}`));
+        } else {
+          resolve();
+        }
+      });
+    });
+
+    // 7. Find ffmpeg.exe inside the extracted folder recursively
+    sendStatus('Searching for ffmpeg.exe in extracted folder...', 100);
+    const foundExePath = findFileRecursively(extractTempDir, 'ffmpeg.exe');
+    if (!foundExePath) {
+      throw new Error('Could not locate ffmpeg.exe inside the extracted archive.');
+    }
+
+    // 8. Copy ffmpeg.exe to final destination
+    sendStatus('Deploying executable to bin/ffmpeg/bin/...', 100);
+    fs.copyFileSync(foundExePath, ffmpegFinalPath);
+
+    // 9. Verify file exists
+    if (fs.existsSync(ffmpegFinalPath)) {
+      sendStatus('Cleaning up temporary setup files...', 100);
+      try {
+        if (fs.existsSync(ffmpegZipDest)) fs.unlinkSync(ffmpegZipDest);
+        if (fs.existsSync(extractTempDir)) fs.rmSync(extractTempDir, { recursive: true, force: true });
+        // Delete backup folder now that installation succeeded
+        if (backedUp && fs.existsSync(ffmpegBaseDirBak)) {
+          fs.rmSync(ffmpegBaseDirBak, { recursive: true, force: true });
+        }
+      } catch (cleanupErr) {
+        console.warn('[FFmpeg Setup Cleanup Warning]', cleanupErr);
+      }
+      // Re-configure FFmpeg path globally for fluent-ffmpeg now that it exists locally
+      configureFfmpeg();
+      if (customUrl && customVersion) {
+        updateLocalPackageJson('ffmpeg', customUrl, customVersion);
+      }
+      return { success: true, path: ffmpegFinalPath };
+    } else {
+      throw new Error('Failed to copy ffmpeg.exe to destination.');
+    }
+
+  } catch (error) {
+    console.error('[FFmpeg Download/Setup Error]', error);
+    
+    // Rollback phase
+    if (backedUp && fs.existsSync(ffmpegBaseDirBak)) {
+      sendStatus('Installation failed. Restoring original FFmpeg backup...', 100);
+      try {
+        if (fs.existsSync(ffmpegBaseDir)) {
+          fs.rmSync(ffmpegBaseDir, { recursive: true, force: true });
+        }
+        fs.renameSync(ffmpegBaseDirBak, ffmpegBaseDir);
+      } catch (restoreErr) {
+        console.error('[FFmpeg Rollback Restore Error]', restoreErr);
+      }
+    }
+    
+    return { success: false, error: error.message };
+  }
+
+  function sendStatus(msg, progress = 0) {
+    if (mainWindow) {
+      mainWindow.webContents.send('ffmpeg-download-progress', { msg, progress });
+    }
+  }
+});
+
+// Helper: Recursively find a file by name
+function findFileRecursively(dir, fileName) {
+  const files = fs.readdirSync(dir);
+  for (const file of files) {
+    const fullPath = path.join(dir, file);
+    const stat = fs.statSync(fullPath);
+    if (stat.isDirectory()) {
+      const found = findFileRecursively(fullPath, fileName);
+      if (found) return found;
+    } else if (file.toLowerCase() === fileName.toLowerCase()) {
+      return fullPath;
+    }
+  }
+  return null;
+}
+
+// Helper: Recursively find and copy files with specified extensions (for restoring models/voices)
+function copyFilesWithExtension(srcDir, destDir, extensions) {
+  if (!fs.existsSync(srcDir)) return;
+  if (!fs.existsSync(destDir)) {
+    try {
+      fs.mkdirSync(destDir, { recursive: true });
+    } catch (e) {
+      console.error(`[Backup Restore Error] Failed to create destination directory ${destDir}:`, e);
+      return;
+    }
+  }
+
+  let files = [];
+  try {
+    files = fs.readdirSync(srcDir);
+  } catch (err) {
+    console.error(`[Backup Restore Error] Failed to read source directory ${srcDir}:`, err);
+    return;
+  }
+
+  for (const file of files) {
+    const srcPath = path.join(srcDir, file);
+    try {
+      const stat = fs.statSync(srcPath);
+      if (stat.isDirectory()) {
+        copyFilesWithExtension(srcPath, destDir, extensions);
+      } else {
+        const ext = path.extname(file).toLowerCase();
+        if (extensions.includes(ext)) {
+          const destPath = path.join(destDir, file);
+          try {
+            fs.copyFileSync(srcPath, destPath);
+            console.log(`[Backup Restore] Restored model/voice asset: ${file}`);
+          } catch (err) {
+            console.error(`[Backup Restore Error] Failed to restore asset ${file}:`, err);
+          }
+        }
+      }
+    } catch (statErr) {
+      console.error(`[Backup Restore Error] Failed to get stats for ${srcPath}:`, statErr);
+    }
+  }
+}
+
+// IPC: Download Piper Engine (C++ build)
+ipcMain.handle('download-piper', async (event, customUrl, customVersion) => {
+  const piperTargetDir = getAssetPath('bin', 'piper');
+  const piperTargetDirBak = piperTargetDir + '_bak';
+  const piperZipDest = path.join(tmpDir, 'piper.zip');
+  const piperFinalExe = path.join(piperTargetDir, 'piper', 'piper.exe');
+  const url = 'https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_windows_amd64.zip';
+
+  let backedUp = false;
+
+  try {
+    if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+
+    // 1. Perform backup of the existing folder
+    if (fs.existsSync(piperTargetDir)) {
+      sendStatus('Backing up existing Piper configuration...', 0);
+      if (fs.existsSync(piperTargetDirBak)) {
+        fs.rmSync(piperTargetDirBak, { recursive: true, force: true });
+      }
+      fs.renameSync(piperTargetDir, piperTargetDirBak);
+      backedUp = true;
+    }
+
+    // 2. Ensure target directory exists for new download
+    if (!fs.existsSync(piperTargetDir)) fs.mkdirSync(piperTargetDir, { recursive: true });
+
+    sendStatus('Downloading Piper Neural TTS Engine (approx. 22MB)...', 0);
+    const downloadLink = customUrl || url;
+    await downloadUrlToFile(downloadLink, piperZipDest, (downloaded, total) => {
+      const percentage = total ? Math.round((downloaded / total) * 100) : 0;
+      sendStatus(`Downloading Piper: ${percentage}%`, percentage);
+    });
+
+    sendStatus('Extracting Piper engine archive...', 100);
+    const extractCmd = `powershell -Command "Expand-Archive -Path '${piperZipDest}' -DestinationPath '${piperTargetDir}' -Force"`;
+    await new Promise((resolve, reject) => {
+      exec(extractCmd, (err, stdout, stderr) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+
+    if (fs.existsSync(piperFinalExe)) {
+      sendStatus('Restoring voice models from backup...', 100);
+      // Restore voice models (.onnx and .json) from backup folder to avoid redownloading them
+      if (backedUp && fs.existsSync(piperTargetDirBak)) {
+        const newVoiceDir = path.join(piperTargetDir, 'piper');
+        copyFilesWithExtension(piperTargetDirBak, newVoiceDir, ['.onnx', '.json']);
+      }
+
+      sendStatus('Cleaning up temp files...', 100);
+      if (fs.existsSync(piperZipDest)) fs.unlinkSync(piperZipDest);
+      // Delete backup folder now that installation succeeded
+      if (backedUp && fs.existsSync(piperTargetDirBak)) {
+        fs.rmSync(piperTargetDirBak, { recursive: true, force: true });
+      }
+      if (customUrl && customVersion) {
+        updateLocalPackageJson('piper', customUrl, customVersion);
+      }
+      return { success: true, path: piperFinalExe };
+    } else {
+      throw new Error('Failed to configure piper.exe at destination.');
+    }
+  } catch (error) {
+    console.error('[Piper Engine Download Error]', error);
+    
+    // Rollback phase
+    if (backedUp && fs.existsSync(piperTargetDirBak)) {
+      sendStatus('Installation failed. Restoring original Piper backup...', 100);
+      try {
+        if (fs.existsSync(piperTargetDir)) {
+          fs.rmSync(piperTargetDir, { recursive: true, force: true });
+        }
+        fs.renameSync(piperTargetDirBak, piperTargetDir);
+      } catch (restoreErr) {
+        console.error('[Piper Rollback Restore Error]', restoreErr);
+      }
+    }
+    
+    return { success: false, error: error.message };
+  }
+
+  function sendStatus(msg, progress = 0) {
+    if (mainWindow) {
+      mainWindow.webContents.send('piper-download-progress', { msg, progress });
+    }
+  }
+});
+
+// IPC: Download Whisper.cpp Engine (C++ build)
+ipcMain.handle('download-whisper-engine', async (event, customUrl, customVersion) => {
+  const whisperBaseDir = getAssetPath('bin', 'whisper');
+  const whisperBaseDirBak = whisperBaseDir + '_bak';
+  const whisperZipDest = path.join(tmpDir, 'whisper.zip');
+  const whisperTargetDir = getAssetPath('bin', 'whisper', 'Release');
+  const whisperFinalExe = path.join(whisperTargetDir, 'whisper-cli.exe');
+  const url = 'https://github.com/ggml-org/whisper.cpp/releases/download/v1.9.1/whisper-bin-x64.zip';
+
+  let backedUp = false;
+
+  try {
+    if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+
+    // 1. Perform backup of the existing folder
+    if (fs.existsSync(whisperBaseDir)) {
+      sendStatus('Backing up existing Whisper configuration...', 0);
+      if (fs.existsSync(whisperBaseDirBak)) {
+        fs.rmSync(whisperBaseDirBak, { recursive: true, force: true });
+      }
+      fs.renameSync(whisperBaseDir, whisperBaseDirBak);
+      backedUp = true;
+    }
+
+    // 2. Ensure target directory exists for new download
+    if (!fs.existsSync(whisperTargetDir)) fs.mkdirSync(whisperTargetDir, { recursive: true });
+
+    sendStatus('Downloading Whisper.cpp Engine (approx. 8MB)...', 0);
+    const downloadLink = customUrl || url;
+    await downloadUrlToFile(downloadLink, whisperZipDest, (downloaded, total) => {
+      const percentage = total ? Math.round((downloaded / total) * 100) : 0;
+      sendStatus(`Downloading Whisper: ${percentage}%`, percentage);
+    });
+
+    sendStatus('Extracting Whisper engine archive...', 100);
+    const extractCmd = `powershell -Command "Expand-Archive -Path '${whisperZipDest}' -DestinationPath '${whisperTargetDir}' -Force"`;
+    await new Promise((resolve, reject) => {
+      exec(extractCmd, (err, stdout, stderr) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+
+    // Handle zip nesting: if archive extracted a nested 'Release' folder, move files up
+    const nestedReleaseDir = path.join(whisperTargetDir, 'Release');
+    if (fs.existsSync(nestedReleaseDir) && fs.statSync(nestedReleaseDir).isDirectory()) {
+      const files = fs.readdirSync(nestedReleaseDir);
+      for (const file of files) {
+        const srcPath = path.join(nestedReleaseDir, file);
+        const destPathFile = path.join(whisperTargetDir, file);
+        if (fs.existsSync(destPathFile)) {
+          const stat = fs.statSync(destPathFile);
+          if (stat.isDirectory()) {
+            fs.rmSync(destPathFile, { recursive: true, force: true });
+          } else {
+            fs.unlinkSync(destPathFile);
+          }
+        }
+        fs.renameSync(srcPath, destPathFile);
+      }
+      try {
+        fs.rmdirSync(nestedReleaseDir);
+      } catch (rmDirErr) {
+        console.warn('[Whisper Cleanup Warning] Failed to delete nested Release directory:', rmDirErr);
+      }
+    }
+
+    // Handle binary naming options:
+    // In newer releases (v1.9.0+), whisper-cli.exe is precompiled inside the zip, and main.exe is just a deprecation warning.
+    // We only rename main.exe to whisper-cli.exe if whisper-cli.exe does not exist.
+    const mainExePath = path.join(whisperTargetDir, 'main.exe');
+    if (fs.existsSync(mainExePath)) {
+      if (!fs.existsSync(whisperFinalExe)) {
+        fs.renameSync(mainExePath, whisperFinalExe);
+      } else {
+        // Delete main.exe warning wrapper as we don't need it
+        try {
+          fs.unlinkSync(mainExePath);
+        } catch (e) {}
+      }
+    }
+
+    if (fs.existsSync(whisperFinalExe)) {
+      sendStatus('Restoring Whisper models from backup...', 100);
+      // Restore whisper models (.bin) from backup folder to avoid redownloading them
+      if (backedUp && fs.existsSync(whisperBaseDirBak)) {
+        const newModelDir = path.join(whisperBaseDir, 'Release');
+        copyFilesWithExtension(whisperBaseDirBak, newModelDir, ['.bin']);
+      }
+
+      sendStatus('Cleaning up temp files...', 100);
+      if (fs.existsSync(whisperZipDest)) fs.unlinkSync(whisperZipDest);
+      // Delete backup folder now that installation succeeded
+      if (backedUp && fs.existsSync(whisperBaseDirBak)) {
+        fs.rmSync(whisperBaseDirBak, { recursive: true, force: true });
+      }
+      if (customUrl && customVersion) {
+        updateLocalPackageJson('whisper', customUrl, customVersion);
+      }
+      return { success: true, path: whisperFinalExe };
+    } else {
+      throw new Error('Failed to configure whisper-cli.exe at destination.');
+    }
+  } catch (error) {
+    console.error('[Whisper Engine Download Error]', error);
+    
+    // Rollback phase
+    if (backedUp && fs.existsSync(whisperBaseDirBak)) {
+      sendStatus('Installation failed. Restoring original Whisper backup...', 100);
+      try {
+        if (fs.existsSync(whisperBaseDir)) {
+          fs.rmSync(whisperBaseDir, { recursive: true, force: true });
+        }
+        fs.renameSync(whisperBaseDirBak, whisperBaseDir);
+      } catch (restoreErr) {
+        console.error('[Whisper Rollback Restore Error]', restoreErr);
+      }
+    }
+    
+    return { success: false, error: error.message };
+  }
+
+  function sendStatus(msg, progress = 0) {
+    if (mainWindow) {
+      mainWindow.webContents.send('whisper-download-progress', { msg, progress });
+    }
+  }
+});
+
+// Menu Setup: App menu bar
+function setupAppMenu() {
+  const template = [
+    {
+      label: 'File',
+      submenu: [
+        { role: 'quit' }
+      ]
+    },
+    {
+      label: 'Tools',
+      submenu: [
+        {
+          label: 'Download latest FFmpeg',
+          click: () => {
+            if (mainWindow) {
+              mainWindow.webContents.send('trigger-ffmpeg-download');
+            }
+          }
+        },
+        {
+          label: 'Download Piper Engine',
+          click: () => {
+            if (mainWindow) {
+              mainWindow.webContents.send('trigger-piper-download');
+            }
+          }
+        },
+        {
+          label: 'Download Whisper.cpp Engine',
+          click: () => {
+            if (mainWindow) {
+              mainWindow.webContents.send('trigger-whisper-download');
+            }
+          }
+        },
+        { type: 'separator' },
+        { role: 'reload' },
+        { role: 'forceReload' },
+        { role: 'toggleDevTools' }
+      ]
+    }
+  ];
+  const menu = Menu.buildFromTemplate(template);
+  Menu.setApplicationMenu(menu);
+}

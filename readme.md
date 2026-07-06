@@ -6,25 +6,25 @@ SpeechBoleh is a state-of-the-art, fully offline Desktop Client for high-fidelit
 
 ## 🚀 Key Features
 
-* **Local Speech-to-Text (STT)**: Powered by a high-performance standalone Whisper.cpp wrapper, transcribing microphone recordings or uploaded audio files (.mp3, .wav, .m4a).
-* **Local Text-to-Speech (TTS)**: Powered by the offline Piper Neural TTS engine, generating voice files from input text using highly natural local ONNX voice models.
+* **Local Speech-to-Text (STT)**: Powered by a high-performance standalone [Whisper.cpp](https://github.com/ggerganov/whisper.cpp) wrapper, transcribing microphone recordings or uploaded audio files (.mp3, .wav, .m4a).
+* **Local Text-to-Speech (TTS)**: Powered by the offline [Piper](https://github.com/rhasspy/piper) Neural TTS engine, generating voice files from input text using highly natural local ONNX voice models.
 * **Granular Voice Control**: Sliders to adjust speaking pace, gaps between sentences, tone variance, and phoneme cadence.
 * **Diagnostics & Device Overrides**: Built-in visualizers, playback tools for recorded microphone clips, and hardware input overrides to select specific microphone tracks.
 * **Activity Log Console**: A real-time, color-coded terminal-style console printing all background activity, transcoding steps, model downloads, and pipeline events.
-* **Fully Self-Contained**: Configured to run using local FFmpeg and model assets stored directly in the application folder (`bin/`).
+* **Fully Self-Contained**: Configured to run using local [FFmpeg](https://ffmpeg.org/) and model assets stored directly in the application folder (`bin/`).
 
 ---
 
 ## 🚩 Release Note
 
-Current release includes both the Portable version and the Installer version packaged together in a single ZIP file. If you prefer not to install the application on your system, you can simply run SpeechBoleh 0.5.0.exe directly. At this moment, this release exclusively supports Windows 64-bit operating systems.
+Current release includes both the Portable version and the Installer version packaged together in a single ZIP file. If you prefer not to install the application on your system, you can simply run SpeechBoleh 0.6.0.exe directly. At this moment, this release exclusively supports Windows 64-bit operating systems.
 
 ### Prerequisite Note:
 When you launch the application for the first time, it will check for the Microsoft Visual C++ Redistributable. If it is missing from your system, the application will prompt you to automatically download and install it. Once the C++ Runtime installation finishes, the application will be ready to use.
 
 If you prefer not to use the automatic installer, you can manually download and install the runtime directly from the official [Microsoft website](https://aka.ms/vs/17/release/vc_redist.x64.exe).
 
-I have included Whisper.cpp and Piper directly in the package to handle local CPU model inference. Looking ahead, future updates will introduce features allowing you to seamlessly download new models and upgrade existing ones directly within the application.
+I have included [Whisper.cpp](https://github.com/ggerganov/whisper.cpp) and [Piper](https://github.com/rhasspy/piper) directly in the package to handle local CPU model inference. Looking ahead, future updates will introduce features allowing you to seamlessly download new models and upgrade existing ones directly within the application.
 
 ---
 
@@ -54,14 +54,15 @@ Before you begin, ensure you have the following installed:
 
 2. **Install dependencies**:
    This is required before you run `npm start` or `npm run dist`.
-   
+
    ```bash
    npm install
    ```
 
 ### Development:
 
-1. **Start the application**:
+1. **Start the application**:  
+
    ```bash
    npm start
    ```
@@ -92,15 +93,17 @@ npm run dist
 * **Custom Protocol Server**: Registers a secure local `media://` protocol to stream temporary `.wav` files safely between Node.js temporary folders and HTML5 audio player elements without exposing standard file path URIs.
 
 ### 3. Speech-to-Text Pipeline (STT)
-* **Whisper.cpp**: Standalone high-performance C++ transcription binary running GGUF-compatible weights.
-* **Local FFmpeg**: Embedded inside `bin/ffmpeg/bin/ffmpeg.exe`, handling input resampling and converting diverse uploads into standard 16-bit mono PCM wav files required by Whisper.cpp.
+* **Whisper.cpp**: Standalone high-performance C++ transcription binary running GGUF-compatible weights (Project: [ggerganov/whisper.cpp](https://github.com/ggerganov/whisper.cpp), Binaries: [Releases](https://github.com/ggerganov/whisper.cpp/releases)).
+* **Local [FFmpeg](https://ffmpeg.org/)**: Embedded inside `bin/ffmpeg/bin/ffmpeg.exe`, handling input resampling and converting diverse uploads into standard 16-bit mono PCM wav files required by Whisper.cpp. Windows builds are sourced from [gyan.dev](https://www.gyan.dev/ffmpeg/builds/).
 * **Gyan.dev Model Downloader**: A redirect-aware HTTPS downloader that fetches model weights (`ggml-tiny.bin` and `ggml-base.bin`) directly from Hugging Face repositories, handling 307/308 relative location redirections dynamically.
 
 ### 4. Text-to-Speech Pipeline (TTS)
-* **Piper TTS**: Standalone C++ executable release running local voice models.
+* **Piper TTS**: Standalone C++ executable release running local voice models (Project: [rhasspy/piper](https://github.com/rhasspy/piper), Binaries: [Releases](https://github.com/rhasspy/piper/releases)).
 * **ONNX Runtime (Embedded)**: Loaded via Piper to process ONNX-based voice models (`en_US-lessac-medium.onnx`, `en_US-joe-medium.onnx`, `en_US-ryan-medium.onnx`).
 * **Hugging Face Downloader**: Downloads voice models (`.onnx` and `.json` configs) dynamically to your offline cache directory.
 
+### Resources
+Please read external resources [here](bin/readme.md)
 ---
 
 ## 📁 Project Architecture & Components
@@ -156,9 +159,9 @@ When preparing a production package (e.g. using `electron-builder`), ensure deve
     "!bin/*.zip",
     "bin/ffmpeg/bin/ffmpeg.exe",
     "bin/piper/piper/**/*",
-    "bin/whisper/Release/whisper.exe"
+    "bin/whisper/Release/whisper-cli.exe"
   ]
 }
 ```
-* **Omit `scratch/`**: Excludes developmental test scripts.
-* **Omit `.zip`**: Unused source archives can be deleted or excluded to save approx 30MB of space.
+
+
