@@ -35,20 +35,47 @@ function getAssetPath(...parts) {
   return path.join(base, ...parts);
 }
 
-// Helper to get component config from local package.json
+// Helper to get component config (combines package.json defaults with writeable overrides)
 function getLocalComponentConfig(component) {
+  let config = null;
+
+  // 1. Read default configs from package.json packaged inside the ASAR
   try {
     const pkgPath = path.join(__dirname, 'package.json');
     if (fs.existsSync(pkgPath)) {
       const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
       if (pkg.pkg && pkg.pkg[component]) {
-        return pkg.pkg[component];
+        config = { ...pkg.pkg[component] };
       }
     }
   } catch (e) {
-    console.error(`[getLocalComponentConfig] Error reading package.json for ${component}:`, e);
+    console.error(`[getLocalComponentConfig] Error reading default package.json for ${component}:`, e);
   }
-  return null;
+
+  // 2. Overlay any writeable overrides from installed_components.json
+  try {
+    const overridePath = getComponentsConfigPath();
+    if (fs.existsSync(overridePath)) {
+      const overrides = JSON.parse(fs.readFileSync(overridePath, 'utf8'));
+      if (overrides[component]) {
+        config = { ...config, ...overrides[component] };
+      }
+    }
+  } catch (e) {
+    console.error(`[getLocalComponentConfig] Error reading overrides for ${component}:`, e);
+  }
+
+  return config;
+}
+
+// Helper to get the path to the writeable component metadata file
+function getComponentsConfigPath() {
+  if (process.env.PORTABLE_EXECUTABLE_DIR) {
+    // Portable: save config next to the portable exe (inside bin/) so it's fully self-contained
+    return path.join(process.env.PORTABLE_EXECUTABLE_DIR, 'bin', 'installed_components.json');
+  }
+  // Installed or Dev: save config inside the writeable user data directory
+  return path.join(app.getPath('userData'), 'installed_components.json');
 }
 
 // Helper to resolve the best URL and version for a component (tries online package.json first, falls back to local config)
@@ -668,21 +695,34 @@ ipcMain.handle('delete-file', async (event, filePath) => {
   }
 });
 
-// Helper: Update a component's config in the local package.json file
+// Helper: Update a component's config in the writeable override config file
 function updateLocalPackageJson(component, url, version) {
   try {
-    const pkgPath = path.join(__dirname, 'package.json');
-    if (fs.existsSync(pkgPath)) {
-      const data = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
-      if (!data.pkg) data.pkg = {};
-      if (!data.pkg[component]) data.pkg[component] = {};
-      data.pkg[component].url = url;
-      data.pkg[component].version = version;
-      fs.writeFileSync(pkgPath, JSON.stringify(data, null, 2), 'utf8');
-      console.log(`[package.json] Dynamic update successful for ${component} to version ${version}`);
+    const overridePath = getComponentsConfigPath();
+    
+    // Ensure parent directory exists (especially for portable bin/ folder)
+    const parentDir = path.dirname(overridePath);
+    if (!fs.existsSync(parentDir)) {
+      fs.mkdirSync(parentDir, { recursive: true });
     }
+
+    let data = {};
+    if (fs.existsSync(overridePath)) {
+      try {
+        data = JSON.parse(fs.readFileSync(overridePath, 'utf8'));
+      } catch (e) {
+        console.warn(`[updateLocalPackageJson] Corrupt override file found, resetting:`, e.message);
+      }
+    }
+
+    if (!data[component]) data[component] = {};
+    data[component].url = url;
+    data[component].version = version;
+
+    fs.writeFileSync(overridePath, JSON.stringify(data, null, 2), 'utf8');
+    console.log(`[installed_components.json] Update successful for ${component} to version ${version}`);
   } catch (err) {
-    console.error(`[package.json] Dynamic update failed for ${component}:`, err);
+    console.error(`[installed_components.json] Update failed for ${component}:`, err);
   }
 }
 
@@ -768,7 +808,8 @@ ipcMain.handle('check-for-updates', async () => {
 
   const getLocalComponentVersion = (name, installed) => {
     if (!installed) return 'Not Installed';
-    return (localPkg.pkg && localPkg.pkg[name] && localPkg.pkg[name].version) || 'latest';
+    const compConfig = getLocalComponentConfig(name);
+    return (compConfig && compConfig.version) || 'latest';
   };
 
   const ffmpegLocalVersion = getLocalComponentVersion('ffmpeg', ffmpegInstalled);
