@@ -675,6 +675,11 @@ ipcMain.handle('check-for-updates', async () => {
   }
 });
 
+// IPC: Get local app version from package.json
+ipcMain.handle('get-app-version', () => {
+  return app.getVersion();
+});
+
 // IPC: Get downloaded Piper ONNX models inside the bin path for TTS dropdown populate
 ipcMain.handle('get-voices', async () => {
   try {

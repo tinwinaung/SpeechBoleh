@@ -100,6 +100,20 @@ const btnClearLogs = document.getElementById('btn-clear-logs');
 // System Initialization
 // ----------------------------------------------------
 window.addEventListener('DOMContentLoaded', async () => {
+  // Set version numbers dynamically from package.json
+  try {
+    const version = await window.api.getAppVersion();
+    const titleBarVersion = document.getElementById('title-bar-version');
+    const aboutVersion = document.getElementById('about-version');
+    const footerVersion = document.getElementById('footer-version');
+
+    if (titleBarVersion) titleBarVersion.innerText = `Beta v${version}`;
+    if (aboutVersion) aboutVersion.innerText = `Version Beta v${version}`;
+    if (footerVersion) footerVersion.innerText = `v${version} (Win64)`;
+  } catch (err) {
+    console.error('Failed to get app version:', err);
+  }
+
   logStatus('Starting local SpeechBoleh services...', 'system');
   logStatus('Scanning system microphones...', 'info');
   await populateMics();
@@ -859,7 +873,7 @@ function setupEventListeners() {
   // Handle changing maximize icon state from the main process events
   window.api.onWindowMaximizedState((isMaximized) => {
     if (isMaximized) {
-      maximizeIcon.className = 'bi bi-windows';
+      maximizeIcon.className = 'bi bi-back';
     } else {
       maximizeIcon.className = 'bi bi-square';
     }
