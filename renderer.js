@@ -210,6 +210,14 @@ window.addEventListener('DOMContentLoaded', async () => {
   logStatus('Syncing offline Whisper model weights...', 'info');
   await syncModels();
   setupEventListeners();
+  
+  const aboutGithubLink = document.getElementById('about-github-link');
+  if (aboutGithubLink) {
+    aboutGithubLink.addEventListener('click', (e) => {
+      e.preventDefault();
+      window.api.openExternalUrl('https://github.com/tinwinaung/SpeechBoleh');
+    });
+  }
 
   // Run first-run setup checks
   await checkAndSetupFirstRun();
