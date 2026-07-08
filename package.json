@@ -38,6 +38,7 @@
       "renderer.js",
       "index.html",
       "index.css",
+      "conf.json",
       "assets/**/*",
       "node_modules/**/*"
     ],
@@ -53,4 +54,4 @@
       "allowToChangeInstallationDirectory": true
     }
   }
-}
+}
