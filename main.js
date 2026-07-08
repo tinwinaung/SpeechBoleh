@@ -35,21 +35,18 @@ function getAssetPath(...parts) {
   return path.join(base, ...parts);
 }
 
-// Helper to get component config (combines package.json defaults with writeable overrides)
+// Helper to get component config (reads defaults from conf.json, overlays writeable overrides)
 function getLocalComponentConfig(component) {
   let config = null;
 
-  // 1. Read default configs from package.json packaged inside the ASAR
+  // 1. Read default configs from conf.json (single source of truth)
   try {
-    const pkgPath = path.join(__dirname, 'package.json');
-    if (fs.existsSync(pkgPath)) {
-      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
-      if (pkg.pkg && pkg.pkg[component]) {
-        config = { ...pkg.pkg[component] };
-      }
+    const conf = initConf();
+    if (conf.pkg && conf.pkg[component]) {
+      config = { ...conf.pkg[component] };
     }
   } catch (e) {
-    console.error(`[getLocalComponentConfig] Error reading default package.json for ${component}:`, e);
+    console.error(`[getLocalComponentConfig] Error reading conf.json for ${component}:`, e);
   }
 
   // 2. Overlay any writeable overrides from installed_components.json
@@ -98,7 +95,7 @@ async function getComponentDownloadUrl(component, defaultFallbackUrl, defaultFal
     const controller = new AbortController();
     const id = setTimeout(() => controller.abort(), 3000); // 3-second timeout
 
-    const response = await fetch('https://raw.githubusercontent.com/tinwinaung/SpeechBoleh/main/package.json', { signal: id.signal });
+    const response = await fetch('https://raw.githubusercontent.com/tinwinaung/SpeechBoleh/main/conf.json', { signal: id.signal });
     clearTimeout(id);
 
     if (response.ok) {
@@ -111,7 +108,7 @@ async function getComponentDownloadUrl(component, defaultFallbackUrl, defaultFal
       }
     }
   } catch (e) {
-    console.warn(`[getComponentDownloadUrl] Failed to fetch online package.json for ${component}:`, e.message);
+    console.warn(`[getComponentDownloadUrl] Failed to fetch online conf.json for ${component}:`, e.message);
   }
 
   // Fall back to local package.json
@@ -925,17 +922,7 @@ ipcMain.handle('check-for-updates', async () => {
   const piperInstalled = fs.existsSync(piperExe);
   const whisperInstalled = fs.existsSync(whisperCli);
 
-  // 2. Read local package.json config
-  let localPkg = { pkg: {} };
-  try {
-    const pkgPath = path.join(__dirname, 'package.json');
-    if (fs.existsSync(pkgPath)) {
-      localPkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
-    }
-  } catch (err) {
-    console.error('Failed to read local package.json:', err);
-  }
-
+  // 2. Get local component versions via conf.json (single source of truth)
   const getLocalComponentVersion = (name, installed) => {
     if (!installed) return 'Not Installed';
     const compConfig = getLocalComponentConfig(name);
@@ -947,20 +934,25 @@ ipcMain.handle('check-for-updates', async () => {
   const whisperLocalVersion = getLocalComponentVersion('whisper', whisperInstalled);
 
   try {
-    // 3. Fetch remote package.json
-    const response = await fetch('https://raw.githubusercontent.com/tinwinaung/SpeechBoleh/main/package.json');
-    if (!response.ok) {
-      throw new Error(`Failed to fetch online package.json (status ${response.status})`);
+    // 3. Fetch remote package.json for app version check + remote conf.json for component URLs
+    const [pkgResponse, confResponse] = await Promise.all([
+      fetch('https://raw.githubusercontent.com/tinwinaung/SpeechBoleh/main/package.json'),
+      fetch('https://raw.githubusercontent.com/tinwinaung/SpeechBoleh/main/conf.json')
+    ]);
+    if (!pkgResponse.ok) {
+      throw new Error(`Failed to fetch online package.json (status ${pkgResponse.status})`);
     }
-    const data = await response.json();
-    const remoteVersion = data.version;
+    const pkgData = await pkgResponse.json();
+    const remoteVersion = pkgData.version;
     if (!remoteVersion) {
       throw new Error('Version field not found in remote package.json');
     }
 
+    const data = confResponse.ok ? await confResponse.json() : {};
+
     const appUpdateAvailable = isVersionNewer(localVersion, remoteVersion);
 
-    // 4. Get remote component configs
+    // 4. Get remote component configs from conf.json
     const getRemoteComponentData = (name, localVer) => {
       const remoteData = (data.pkg && data.pkg[name]) || { version: 'latest', url: '' };
       const remoteVer = remoteData.version || 'latest';

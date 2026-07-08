@@ -52,19 +52,5 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true
     }
-  },
-  "pkg": {
-    "ffmpeg": {
-      "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip",
-      "version": "latest"
-    },
-    "piper": {
-      "url": "https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_windows_amd64.zip",
-      "version": "2023.11.14-2"
-    },
-    "whisper": {
-      "url": "https://github.com/ggml-org/whisper.cpp/releases/download/v1.9.1/whisper-bin-x64.zip",
-      "version": "1.9.1"
-    }
   }
-}
+}
