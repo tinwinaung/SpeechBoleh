@@ -1,4 +1,7 @@
 {
+    "app": {
+        "version": "0.6.0"
+    },
     "whisper": {
         "models": [
             {
