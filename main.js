@@ -135,10 +135,69 @@ if (!fs.existsSync(tmpDir)) {
   fs.mkdirSync(tmpDir, { recursive: true });
 }
 
+// ----------------------------------------------------
+// conf.json — Writable Config (Option B)
+// On first run, the bundled conf.json (inside ASAR) is copied to a writable
+// location so the user can edit it after installation without touching the ASAR.
+//
+//   Installed mode : %APPDATA%\SpeechBoleh\conf.json
+//   Portable mode  : <portableDir>\conf.json
+//   Dev mode       : <projectDir>\conf.json  (read directly, no copy needed)
+// ----------------------------------------------------
+
+function getConfPath() {
+  if (!app.isPackaged) {
+    // Development: read directly from the project directory
+    return path.join(__dirname, 'conf.json');
+  }
+  if (process.env.PORTABLE_EXECUTABLE_DIR) {
+    // Portable: store next to the portable executable
+    return path.join(process.env.PORTABLE_EXECUTABLE_DIR, 'conf.json');
+  }
+  // Installed: store in writable userData directory
+  return path.join(app.getPath('userData'), 'conf.json');
+}
+
+function initConf() {
+  const writablePath = getConfPath();
+
+  // In packaged mode, copy the bundled conf.json to the writable location on first run
+  if (app.isPackaged && !fs.existsSync(writablePath)) {
+    try {
+      const bundledPath = path.join(__dirname, 'conf.json');
+      const bundledConf = fs.readFileSync(bundledPath, 'utf8');
+      // Ensure parent directory exists (e.g. portable dir may not have it yet)
+      fs.mkdirSync(path.dirname(writablePath), { recursive: true });
+      fs.writeFileSync(writablePath, bundledConf, 'utf8');
+      console.log(`[conf.json] First run — copied bundled config to: ${writablePath}`);
+    } catch (copyErr) {
+      console.warn('[conf.json] Failed to copy bundled config to writable location:', copyErr.message);
+    }
+  }
+
+  // Read from the writable location (or project dir in dev mode)
+  try {
+    const raw = fs.readFileSync(writablePath, 'utf8');
+    const conf = JSON.parse(raw);
+    console.log(`[conf.json] Loaded from: ${writablePath}`);
+    return conf;
+  } catch (readErr) {
+    console.warn('[conf.json] Failed to read config, falling back to bundled defaults:', readErr.message);
+    // Last-resort fallback: read the bundled copy directly
+    try {
+      const bundledPath = path.join(__dirname, 'conf.json');
+      return JSON.parse(fs.readFileSync(bundledPath, 'utf8'));
+    } catch (e) {
+      console.error('[conf.json] Bundled config also unreadable:', e.message);
+      return {};
+    }
+  }
+}
+
 // Load Whisper model configuration from conf.json (single source of truth)
 let whisperModels = [];
 try {
-  const conf = JSON.parse(fs.readFileSync(path.join(__dirname, 'conf.json'), 'utf8'));
+  const conf = initConf();
   whisperModels = conf.whisper?.models || [];
   console.log(`[conf.json] Loaded ${whisperModels.length} Whisper model(s).`);
 } catch (e) {
