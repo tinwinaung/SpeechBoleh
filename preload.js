@@ -5,9 +5,10 @@ contextBridge.exposeInMainWorld('api', {
   /**
    * Transcribe an audio file (microphone capture or upload) via local whisper.cpp
    * @param {string} filePath - Absolute path to the source audio file
+   * @param {string} language - Target language code (e.g. 'my', 'en', 'auto')
    * @returns {Promise<{success: boolean, text?: string, error?: string}>}
    */
-  sttTranscribe: (filePath) => ipcRenderer.invoke('audio-stt', filePath),
+  sttTranscribe: (filePath, language) => ipcRenderer.invoke('audio-stt', filePath, language),
 
   /**
    * Saves raw microphone audio chunk buffer to the main process temp space
@@ -49,6 +50,12 @@ contextBridge.exposeInMainWorld('api', {
    * @returns {Promise<string[]>}
    */
   getAvailableModels: () => ipcRenderer.invoke('get-available-models'),
+
+  /**
+   * Get the full Whisper model list (name, size, url) from conf.json
+   * @returns {Promise<Array<{file: string, name: string, size: string, url: string, default?: boolean}>>}
+   */
+  getWhisperModels: () => ipcRenderer.invoke('get-whisper-models'),
 
   /**
    * Switch the current active Whisper model
