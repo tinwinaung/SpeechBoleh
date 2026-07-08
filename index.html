@@ -149,13 +149,7 @@
               <div class="input-group input-group-sm">
                 <span class="input-group-text bg-dark border-secondary border-opacity-20 text-secondary"><i class="bi bi-cpu-fill"></i></span>
                 <select id="model-select" class="form-select bg-dark text-white border-secondary border-opacity-20">
-                  <option value="ggml-tiny.bin">Tiny Model (75MB)</option>
-                  <option value="ggml-base.bin" selected>Base Model (142MB) [Default]</option>
-                  <option value="ggml-small.bin">Small Model (466MB)</option>
-                  <option value="ggml-whisper-small-myanmar.bin">Burmese Fine-Tuned Small (466MB)</option>
-                  <option value="ggml-whisper-large-v3-myanmar.bin">Burmese Fine-Tuned Large V3 (3.1GB)</option>
-                  <option value="ggml-medium.bin">Medium Model (1.5GB)</option>
-                  <option value="ggml-large-v3-turbo.bin">Large V3 Turbo Model (809MB)</option>
+                  <!-- Options populated dynamically from conf.json by initWhisperModels() in renderer.js -->
                 </select>
               </div>
             </div>

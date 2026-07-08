@@ -135,6 +135,16 @@ if (!fs.existsSync(tmpDir)) {
   fs.mkdirSync(tmpDir, { recursive: true });
 }
 
+// Load Whisper model configuration from conf.json (single source of truth)
+let whisperModels = [];
+try {
+  const conf = JSON.parse(fs.readFileSync(path.join(__dirname, 'conf.json'), 'utf8'));
+  whisperModels = conf.whisper?.models || [];
+  console.log(`[conf.json] Loaded ${whisperModels.length} Whisper model(s).`);
+} catch (e) {
+  console.warn('[conf.json] Failed to load Whisper model config:', e.message);
+}
+
 // ----------------------------------------------------
 // Robust FFmpeg Binary Location
 // ----------------------------------------------------
@@ -941,6 +951,9 @@ ipcMain.handle('get-available-models', async () => {
   }
 });
 
+// IPC: Return the full Whisper model list from conf.json
+ipcMain.handle('get-whisper-models', () => whisperModels);
+
 // IPC: Set current active model
 ipcMain.handle('set-active-model', async (event, modelName) => {
   activeModel = modelName;
@@ -948,21 +961,17 @@ ipcMain.handle('set-active-model', async (event, modelName) => {
   return { success: true, activeModel };
 });
 
-// Custom download URLs for models not hosted on ggerganov/whisper.cpp HuggingFace repo.
-// Update these URLs once the converted .bin files are uploaded to a GitHub Release.
-const CUSTOM_MODEL_URLS = {
-  'ggml-whisper-small-myanmar.bin':    'https://github.com/tinwinaung/SpeechBoleh/releases/download/models/ggml-whisper-small-myanmar.bin',
-  'ggml-whisper-large-v3-myanmar.bin': 'https://github.com/tinwinaung/SpeechBoleh/releases/download/models/ggml-whisper-large-v3-myanmar.bin',
-};
-
 // IPC: Download model from Hugging Face with progress tracking
 ipcMain.handle('download-model', async (event, modelName) => {
   const whisperBinDir = getAssetPath('bin', 'whisper', 'Release');
   const destPath = path.join(whisperBinDir, modelName);
 
-  // Use custom URL if available, otherwise fall back to ggerganov HuggingFace repo
-  const url = CUSTOM_MODEL_URLS[modelName]
-    ?? `https://huggingface.co/ggerganov/whisper.cpp/resolve/main/${modelName}`;
+  // Resolve download URL from conf.json (single source of truth)
+  const modelConf = whisperModels.find(m => m.file === modelName);
+  if (!modelConf?.url) {
+    return { success: false, error: `No download URL configured for model: ${modelName}` };
+  }
+  const url = modelConf.url;
 
   if (!fs.existsSync(whisperBinDir)) {
     fs.mkdirSync(whisperBinDir, { recursive: true });

@@ -52,6 +52,12 @@ contextBridge.exposeInMainWorld('api', {
   getAvailableModels: () => ipcRenderer.invoke('get-available-models'),
 
   /**
+   * Get the full Whisper model list (name, size, url) from conf.json
+   * @returns {Promise<Array<{file: string, name: string, size: string, url: string, default?: boolean}>>}
+   */
+  getWhisperModels: () => ipcRenderer.invoke('get-whisper-models'),
+
+  /**
    * Switch the current active Whisper model
    * @param {string} modelName - e.g., 'ggml-tiny.bin'
    * @returns {Promise<{success: boolean, activeModel: string}>}

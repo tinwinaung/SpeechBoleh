@@ -56,16 +56,39 @@ const modelSelect = document.getElementById('model-select');
 const languageSelect = document.getElementById('language-select');
 const btnPlayMic = document.getElementById('btn-play-mic');
 
-// Whisper Model Meta-information
-const WHISPER_MODEL_INFO = {
-  'ggml-tiny.bin': { name: 'Tiny Model', size: '75MB' },
-  'ggml-base.bin': { name: 'Base Model', size: '142MB' },
-  'ggml-small.bin': { name: 'Small Model', size: '466MB' },
-  'ggml-whisper-small-myanmar.bin': { name: 'Burmese Fine-Tuned Small', size: '466MB' },
-  'ggml-whisper-large-v3-myanmar.bin': { name: 'Burmese Fine-Tuned Large V3', size: '3.1GB' },
-  'ggml-medium.bin': { name: 'Medium Model', size: '1.5GB' },
-  'ggml-large-v3-turbo.bin': { name: 'Large V3 Turbo Model', size: '809MB' }
-};
+// Whisper Model Meta-information — loaded dynamically from conf.json via IPC
+// Populated at startup by initWhisperModels(); used by syncModels() and ensureModelDownloaded()
+let WHISPER_MODEL_INFO = {};
+
+async function initWhisperModels() {
+  try {
+    const models = await window.api.getWhisperModels();
+    if (!models || models.length === 0) {
+      console.warn('[Models] conf.json returned no Whisper models.');
+      return;
+    }
+
+    // Build lookup map: file -> { name, size }
+    WHISPER_MODEL_INFO = {};
+    models.forEach(m => {
+      WHISPER_MODEL_INFO[m.file] = { name: m.name, size: m.size };
+    });
+
+    // Populate the model-select dropdown dynamically
+    modelSelect.innerHTML = '';
+    models.forEach(m => {
+      const opt = document.createElement('option');
+      opt.value = m.file;
+      opt.innerText = `${m.name} (${m.size})`;
+      if (m.default) opt.selected = true;
+      modelSelect.appendChild(opt);
+    });
+
+    console.log(`[Models] Loaded ${models.length} Whisper model(s) from conf.json.`);
+  } catch (err) {
+    console.error('[Models] Failed to load Whisper model list from conf.json:', err);
+  }
+}
 const playMicIcon = document.getElementById('play-mic-icon');
 const modelDownloadOverlay = document.getElementById('model-download-overlay');
 const downloadProgressBar = document.getElementById('download-progress-bar');
@@ -220,6 +243,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   logStatus('Initializing local SAPI / Piper voice lists...', 'info');
   await populateVoices();
   logStatus('Syncing offline Whisper model weights...', 'info');
+  await initWhisperModels();
   await syncModels();
   setupEventListeners();
   
