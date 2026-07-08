@@ -62,6 +62,7 @@ const WHISPER_MODEL_INFO = {
   'ggml-base.bin': { name: 'Base Model', size: '142MB' },
   'ggml-small.bin': { name: 'Small Model', size: '466MB' },
   'ggml-whisper-small-myanmar.bin': { name: 'Burmese Fine-Tuned Small', size: '466MB' },
+  'ggml-whisper-large-v3-myanmar.bin': { name: 'Burmese Fine-Tuned Large V3', size: '3.1GB' },
   'ggml-medium.bin': { name: 'Medium Model', size: '1.5GB' },
   'ggml-large-v3-turbo.bin': { name: 'Large V3 Turbo Model', size: '809MB' }
 };

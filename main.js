@@ -948,69 +948,24 @@ ipcMain.handle('set-active-model', async (event, modelName) => {
   return { success: true, activeModel };
 });
 
+// Custom download URLs for models not hosted on ggerganov/whisper.cpp HuggingFace repo.
+// Update these URLs once the converted .bin files are uploaded to a GitHub Release.
+const CUSTOM_MODEL_URLS = {
+  'ggml-whisper-small-myanmar.bin':    'https://github.com/tinwinaung/SpeechBoleh/releases/download/models/ggml-whisper-small-myanmar.bin',
+  'ggml-whisper-large-v3-myanmar.bin': 'https://github.com/tinwinaung/SpeechBoleh/releases/download/models/ggml-whisper-large-v3-myanmar.bin',
+};
+
 // IPC: Download model from Hugging Face with progress tracking
 ipcMain.handle('download-model', async (event, modelName) => {
   const whisperBinDir = getAssetPath('bin', 'whisper', 'Release');
   const destPath = path.join(whisperBinDir, modelName);
-  const url = `https://huggingface.co/ggerganov/whisper.cpp/resolve/main/${modelName}`;
+
+  // Use custom URL if available, otherwise fall back to ggerganov HuggingFace repo
+  const url = CUSTOM_MODEL_URLS[modelName]
+    ?? `https://huggingface.co/ggerganov/whisper.cpp/resolve/main/${modelName}`;
 
   if (!fs.existsSync(whisperBinDir)) {
     fs.mkdirSync(whisperBinDir, { recursive: true });
-  }
-
-  if (modelName === 'ggml-whisper-small-myanmar.bin') {
-    console.log('[Model Downloader] Running local conversion for chuuhtetnaing/whisper-small-myanmar...');
-    return new Promise((resolve) => {
-      // Send initial progress
-      event.sender.send('whisper-download-progress', {
-        modelName: modelName,
-        downloaded: 0,
-        total: 100,
-        percentage: 5
-      });
-      
-      const scriptPath = path.join(tmpDir, 'convert_whisper_myanmar.py');
-      const p = spawn('uv', ['run', scriptPath], { cwd: app.getAppPath() });
-      
-      let percentage = 10;
-      p.stdout.on('data', (data) => {
-        const text = data.toString();
-        console.log(`[Convert Script] ${text.trim()}`);
-        if (text.includes('Loading configuration')) {
-          percentage = 20;
-        } else if (text.includes('Downloading mel_filters')) {
-          percentage = 35;
-        } else if (text.includes('Converting and writing')) {
-          percentage = 60;
-        } else if (text.includes('encoder.')) {
-          percentage = Math.min(95, percentage + 0.5);
-        }
-        event.sender.send('whisper-download-progress', {
-          modelName: modelName,
-          downloaded: Math.round(percentage),
-          total: 100,
-          percentage: Math.round(percentage)
-        });
-      });
-      
-      p.stderr.on('data', (data) => {
-        console.warn(`[Convert Script Error] ${data.toString()}`);
-      });
-      
-      p.on('close', (code) => {
-        if (code === 0) {
-          event.sender.send('whisper-download-progress', {
-            modelName: modelName,
-            downloaded: 100,
-            total: 100,
-            percentage: 100
-          });
-          resolve({ success: true });
-        } else {
-          resolve({ success: false, error: `Conversion script exited with code ${code}` });
-        }
-      });
-    });
   }
 
   return new Promise((resolve) => {
