@@ -53,7 +53,42 @@ const titleBarInfo = document.getElementById('title-bar-info');
 
 // Whisper Model Downloader & Diagnostics elements
 const modelSelect = document.getElementById('model-select');
+const languageSelect = document.getElementById('language-select');
 const btnPlayMic = document.getElementById('btn-play-mic');
+
+// Whisper Model Meta-information — loaded dynamically from conf.json via IPC
+// Populated at startup by initWhisperModels(); used by syncModels() and ensureModelDownloaded()
+let WHISPER_MODEL_INFO = {};
+
+async function initWhisperModels() {
+  try {
+    const models = await window.api.getWhisperModels();
+    if (!models || models.length === 0) {
+      console.warn('[Models] conf.json returned no Whisper models.');
+      return;
+    }
+
+    // Build lookup map: file -> { name, size }
+    WHISPER_MODEL_INFO = {};
+    models.forEach(m => {
+      WHISPER_MODEL_INFO[m.file] = { name: m.name, size: m.size };
+    });
+
+    // Populate the model-select dropdown dynamically
+    modelSelect.innerHTML = '';
+    models.forEach(m => {
+      const opt = document.createElement('option');
+      opt.value = m.file;
+      opt.innerText = `${m.name} (${m.size})`;
+      if (m.default) opt.selected = true;
+      modelSelect.appendChild(opt);
+    });
+
+    console.log(`[Models] Loaded ${models.length} Whisper model(s) from conf.json.`);
+  } catch (err) {
+    console.error('[Models] Failed to load Whisper model list from conf.json:', err);
+  }
+}
 const playMicIcon = document.getElementById('play-mic-icon');
 const modelDownloadOverlay = document.getElementById('model-download-overlay');
 const downloadProgressBar = document.getElementById('download-progress-bar');
@@ -208,6 +243,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   logStatus('Initializing local SAPI / Piper voice lists...', 'info');
   await populateVoices();
   logStatus('Syncing offline Whisper model weights...', 'info');
+  await initWhisperModels();
   await syncModels();
   setupEventListeners();
   
@@ -813,11 +849,9 @@ async function syncModels() {
     // Update select options to indicate cached vs cloud status
     Array.from(modelSelect.options).forEach(opt => {
       const isDownloaded = availableModels.includes(opt.value);
-      if (isDownloaded) {
-        opt.innerText = opt.value === 'ggml-tiny.bin' ? 'Tiny Model (75MB) [Cached]' : 'Base Model (142MB) [Cached]';
-      } else {
-        opt.innerText = opt.value === 'ggml-tiny.bin' ? 'Tiny Model (75MB) [Cloud Download]' : 'Base Model (142MB) [Cloud Download]';
-      }
+      const info = WHISPER_MODEL_INFO[opt.value] || { name: opt.value, size: 'Unknown size' };
+      const statusText = isDownloaded ? '[Cached]' : '[Cloud Download]';
+      opt.innerText = `${info.name} (${info.size}) ${statusText}`;
     });
   } catch (err) {
     console.error('[Models] Sync failed:', err);
@@ -838,7 +872,8 @@ async function ensureModelDownloaded() {
     if (await isDownloadInProgress()) return false;
     // Show download UI
     modelDownloadOverlay.style.setProperty('display', 'flex', 'important');
-    downloadTitle.innerText = `Downloading ${targetModel === 'ggml-tiny.bin' ? 'Tiny Model' : 'Base Model'}`;
+    const info = WHISPER_MODEL_INFO[targetModel] || { name: targetModel };
+    downloadTitle.innerText = `Downloading ${info.name}`;
     downloadProgressBar.style.width = '0%';
     downloadBytes.innerText = '0 / 0 MB';
     downloadPct.innerText = '0%';
@@ -1187,7 +1222,8 @@ async function startRecording() {
         }
 
         // 2. Process transcription pipeline
-        const transRes = await window.api.sttTranscribe(rawMicPath);
+        const selectedLang = languageSelect ? languageSelect.value : 'auto';
+        const transRes = await window.api.sttTranscribe(rawMicPath, selectedLang);
 
         // Note: We do NOT delete rawMicPath here now, so the user can play it back to check audio levels.
         // It is cleaned up when a new recording starts or when the app closes.
@@ -1334,7 +1370,8 @@ async function processAudioUpload() {
       throw new Error('Required Whisper model file is not downloaded.');
     }
 
-    const res = await window.api.sttTranscribe(localFilePath);
+    const selectedLang = languageSelect ? languageSelect.value : 'auto';
+    const res = await window.api.sttTranscribe(localFilePath, selectedLang);
     if (res.success) {
       updateSttOutput(res.text);
       logStatus(`Transcribed uploaded audio file: ${selectedAudioFile.name}`, 'success');

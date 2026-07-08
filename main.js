@@ -35,21 +35,18 @@ function getAssetPath(...parts) {
   return path.join(base, ...parts);
 }
 
-// Helper to get component config (combines package.json defaults with writeable overrides)
+// Helper to get component config (reads defaults from conf.json, overlays writeable overrides)
 function getLocalComponentConfig(component) {
   let config = null;
 
-  // 1. Read default configs from package.json packaged inside the ASAR
+  // 1. Read default configs from conf.json (single source of truth)
   try {
-    const pkgPath = path.join(__dirname, 'package.json');
-    if (fs.existsSync(pkgPath)) {
-      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
-      if (pkg.pkg && pkg.pkg[component]) {
-        config = { ...pkg.pkg[component] };
-      }
+    const conf = initConf();
+    if (conf.pkg && conf.pkg[component]) {
+      config = { ...conf.pkg[component] };
     }
   } catch (e) {
-    console.error(`[getLocalComponentConfig] Error reading default package.json for ${component}:`, e);
+    console.error(`[getLocalComponentConfig] Error reading conf.json for ${component}:`, e);
   }
 
   // 2. Overlay any writeable overrides from installed_components.json
@@ -98,7 +95,7 @@ async function getComponentDownloadUrl(component, defaultFallbackUrl, defaultFal
     const controller = new AbortController();
     const id = setTimeout(() => controller.abort(), 3000); // 3-second timeout
 
-    const response = await fetch('https://raw.githubusercontent.com/tinwinaung/SpeechBoleh/main/package.json', { signal: id.signal });
+    const response = await fetch('https://raw.githubusercontent.com/tinwinaung/SpeechBoleh/main/conf.json', { signal: id.signal });
     clearTimeout(id);
 
     if (response.ok) {
@@ -111,7 +108,7 @@ async function getComponentDownloadUrl(component, defaultFallbackUrl, defaultFal
       }
     }
   } catch (e) {
-    console.warn(`[getComponentDownloadUrl] Failed to fetch online package.json for ${component}:`, e.message);
+    console.warn(`[getComponentDownloadUrl] Failed to fetch online conf.json for ${component}:`, e.message);
   }
 
   // Fall back to local package.json
@@ -133,6 +130,121 @@ const tmpDir = app.isPackaged
 
 if (!fs.existsSync(tmpDir)) {
   fs.mkdirSync(tmpDir, { recursive: true });
+}
+
+// ----------------------------------------------------
+// conf.json — Writable Config (Option B)
+// On first run, the bundled conf.json (inside ASAR) is copied to a writable
+// location so the user can edit it after installation without touching the ASAR.
+//
+//   Installed mode : %APPDATA%\SpeechBoleh\conf.json
+//   Portable mode  : <portableDir>\conf.json
+//   Dev mode       : <projectDir>\conf.json  (read directly, no copy needed)
+// ----------------------------------------------------
+
+function getConfPath() {
+  if (!app.isPackaged) {
+    // Development: read directly from the project directory
+    return path.join(__dirname, 'conf.json');
+  }
+  if (process.env.PORTABLE_EXECUTABLE_DIR) {
+    // Portable: store next to the portable executable
+    return path.join(process.env.PORTABLE_EXECUTABLE_DIR, 'conf.json');
+  }
+  // Installed: store in writable userData directory
+  return path.join(app.getPath('userData'), 'conf.json');
+}
+
+function initConf() {
+  const writablePath = getConfPath();
+
+  // Read app version from package.json (bundled with app)
+  let appVersion = '0.0.0';
+  try {
+    const pkgPath = path.join(__dirname, 'package.json');
+    if (fs.existsSync(pkgPath)) {
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+      appVersion = pkg.version || '0.0.0';
+    }
+  } catch (e) {
+    console.warn('[conf.json] Failed to read package.json version:', e.message);
+    try {
+      appVersion = app.getVersion();
+    } catch (_) {}
+  }
+
+  // Helper to extract bundled configuration to the writable path with the correct version
+  const extractConfig = () => {
+    try {
+      const bundledPath = path.join(__dirname, 'conf.json');
+      const bundledConf = JSON.parse(fs.readFileSync(bundledPath, 'utf8'));
+      
+      if (!bundledConf.app) {
+        bundledConf.app = {};
+      }
+      bundledConf.app.version = appVersion;
+
+      fs.mkdirSync(path.dirname(writablePath), { recursive: true });
+      fs.writeFileSync(writablePath, JSON.stringify(bundledConf, null, 4), 'utf8');
+      console.log(`[conf.json] Extracted/Updated config to version ${appVersion} at: ${writablePath}`);
+      return bundledConf;
+    } catch (err) {
+      console.error('[conf.json] Failed to extract config from bundle:', err.message);
+      return null;
+    }
+  };
+
+  // Packaged mode: first-run extract or version-gated re-extract
+  if (app.isPackaged) {
+    if (!fs.existsSync(writablePath)) {
+      console.log('[conf.json] Writable config file does not exist. Extracting...');
+      extractConfig();
+    } else {
+      try {
+        const rawConf = fs.readFileSync(writablePath, 'utf8');
+        const conf = JSON.parse(rawConf);
+        const currentConfVersion = conf.app?.version;
+
+        if (currentConfVersion !== appVersion) {
+          console.log(`[conf.json] Version mismatch (conf.json version: ${currentConfVersion}, package.json version: ${appVersion}). Re-extracting...`);
+          extractConfig();
+        } else {
+          console.log(`[conf.json] Version match (version: ${appVersion}). No extraction needed.`);
+        }
+      } catch (err) {
+        console.warn('[conf.json] Error reading existing config to check version, re-extracting:', err.message);
+        extractConfig();
+      }
+    }
+  }
+
+  // Read from the writable location (or project dir in dev mode)
+  try {
+    const raw = fs.readFileSync(writablePath, 'utf8');
+    const conf = JSON.parse(raw);
+    console.log(`[conf.json] Loaded from: ${writablePath}`);
+    return conf;
+  } catch (readErr) {
+    console.warn('[conf.json] Failed to read config, falling back to bundled defaults:', readErr.message);
+    // Last-resort fallback: read the bundled copy directly
+    try {
+      const bundledPath = path.join(__dirname, 'conf.json');
+      return JSON.parse(fs.readFileSync(bundledPath, 'utf8'));
+    } catch (e) {
+      console.error('[conf.json] Bundled config also unreadable:', e.message);
+      return {};
+    }
+  }
+}
+
+// Load Whisper model configuration from conf.json (single source of truth)
+let whisperModels = [];
+try {
+  const conf = initConf();
+  whisperModels = conf.whisper?.models || [];
+  console.log(`[conf.json] Loaded ${whisperModels.length} Whisper model(s).`);
+} catch (e) {
+  console.warn('[conf.json] Failed to load Whisper model config:', e.message);
 }
 
 // ----------------------------------------------------
@@ -493,7 +605,7 @@ function transcodeToWhisperFormat(inputPath, outputPath) {
 }
 
 // 2. Invoke local whisper.cpp executable for transcription
-function transcribeWithWhisper(wavPath) {
+function transcribeWithWhisper(wavPath, language) {
   return new Promise((resolve, reject) => {
     const whisperCli = getAssetPath('bin', 'whisper', 'Release', 'whisper-cli.exe');
     const modelPath = getAssetPath('bin', 'whisper', 'Release', activeModel);
@@ -507,6 +619,9 @@ function transcribeWithWhisper(wavPath) {
 
     // Parameters: -m (model), -f (audio file), -nt (no timestamps), -np (no prints / clean output)
     const args = ['-m', modelPath, '-f', wavPath, '-nt', '-np'];
+    if (language && language !== 'auto') {
+      args.push('-l', language);
+    }
     console.log(`[Whisper.cpp] Running: ${whisperCli} ${args.join(' ')}`);
 
     execFile(whisperCli, args, (err, stdout, stderr) => {
@@ -521,14 +636,14 @@ function transcribeWithWhisper(wavPath) {
 }
 
 // IPC: STT Transcribe File/Buffer Handler
-ipcMain.handle('audio-stt', async (event, inputPath) => {
+ipcMain.handle('audio-stt', async (event, inputPath, language) => {
   const transOutPath = path.join(tmpDir, `transcoded_${Date.now()}.wav`);
   try {
     // 1. Transcode input audio
     await transcodeToWhisperFormat(inputPath, transOutPath);
 
     // 2. Run local transcription
-    const transcript = await transcribeWithWhisper(transOutPath);
+    const transcript = await transcribeWithWhisper(transOutPath, language);
 
     // 3. Clean up transcoded file immediately
     try {
@@ -794,9 +909,10 @@ function isVersionNewer(local, remote) {
   return false;
 }
 
-// IPC: Check for updates online from GitHub package.json
+// IPC: Check for updates online from GitHub conf.json
 ipcMain.handle('check-for-updates', async () => {
-  const localVersion = app.getVersion();
+  const localConf = initConf();
+  const localVersion = (localConf.app && localConf.app.version) || '0.0.0';
   
   // 1. Get binary presence statuses
   const localFfmpeg = getAssetPath('bin', 'ffmpeg', 'bin', 'ffmpeg.exe');
@@ -807,17 +923,7 @@ ipcMain.handle('check-for-updates', async () => {
   const piperInstalled = fs.existsSync(piperExe);
   const whisperInstalled = fs.existsSync(whisperCli);
 
-  // 2. Read local package.json config
-  let localPkg = { pkg: {} };
-  try {
-    const pkgPath = path.join(__dirname, 'package.json');
-    if (fs.existsSync(pkgPath)) {
-      localPkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
-    }
-  } catch (err) {
-    console.error('Failed to read local package.json:', err);
-  }
-
+  // 2. Get local component versions via conf.json (single source of truth)
   const getLocalComponentVersion = (name, installed) => {
     if (!installed) return 'Not Installed';
     const compConfig = getLocalComponentConfig(name);
@@ -829,20 +935,25 @@ ipcMain.handle('check-for-updates', async () => {
   const whisperLocalVersion = getLocalComponentVersion('whisper', whisperInstalled);
 
   try {
-    // 3. Fetch remote package.json
-    const response = await fetch('https://raw.githubusercontent.com/tinwinaung/SpeechBoleh/main/package.json');
-    if (!response.ok) {
-      throw new Error(`Failed to fetch online package.json (status ${response.status})`);
+    // 3. Fetch remote package.json (for app remoteVersion) + remote conf.json (for component URLs) in parallel
+    const [pkgResponse, confResponse] = await Promise.all([
+      fetch('https://raw.githubusercontent.com/tinwinaung/SpeechBoleh/main/package.json'),
+      fetch('https://raw.githubusercontent.com/tinwinaung/SpeechBoleh/main/conf.json')
+    ]);
+    if (!pkgResponse.ok) {
+      throw new Error(`Failed to fetch online package.json (status ${pkgResponse.status})`);
     }
-    const data = await response.json();
-    const remoteVersion = data.version;
+    const pkgData = await pkgResponse.json();
+    const remoteVersion = pkgData.version || null;
     if (!remoteVersion) {
       throw new Error('Version field not found in remote package.json');
     }
+    // conf.json provides component download URLs; fall back to empty object if unavailable
+    const data = confResponse.ok ? await confResponse.json() : {};
 
     const appUpdateAvailable = isVersionNewer(localVersion, remoteVersion);
 
-    // 4. Get remote component configs
+    // 4. Get remote component configs from conf.json
     const getRemoteComponentData = (name, localVer) => {
       const remoteData = (data.pkg && data.pkg[name]) || { version: 'latest', url: '' };
       const remoteVer = remoteData.version || 'latest';
@@ -938,6 +1049,9 @@ ipcMain.handle('get-available-models', async () => {
   }
 });
 
+// IPC: Return the full Whisper model list from conf.json
+ipcMain.handle('get-whisper-models', () => whisperModels);
+
 // IPC: Set current active model
 ipcMain.handle('set-active-model', async (event, modelName) => {
   activeModel = modelName;
@@ -949,7 +1063,13 @@ ipcMain.handle('set-active-model', async (event, modelName) => {
 ipcMain.handle('download-model', async (event, modelName) => {
   const whisperBinDir = getAssetPath('bin', 'whisper', 'Release');
   const destPath = path.join(whisperBinDir, modelName);
-  const url = `https://huggingface.co/ggerganov/whisper.cpp/resolve/main/${modelName}`;
+
+  // Resolve download URL from conf.json (single source of truth)
+  const modelConf = whisperModels.find(m => m.file === modelName);
+  if (!modelConf?.url) {
+    return { success: false, error: `No download URL configured for model: ${modelName}` };
+  }
+  const url = modelConf.url;
 
   if (!fs.existsSync(whisperBinDir)) {
     fs.mkdirSync(whisperBinDir, { recursive: true });

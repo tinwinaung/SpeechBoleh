@@ -1,1 +1,66 @@
-{}
+{
+    "app": {
+        "version": "0.6.1"
+    },
+    "pkg": {
+        "ffmpeg": {
+            "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip",
+            "version": "latest"
+        },
+        "piper": {
+            "url": "https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_windows_amd64.zip",
+            "version": "2023.11.14-2"
+        },
+        "whisper": {
+            "url": "https://github.com/ggml-org/whisper.cpp/releases/download/v1.9.1/whisper-bin-x64.zip",
+            "version": "1.9.1"
+        }
+    },
+    "whisper": {
+        "models": [
+            {
+                "file": "ggml-tiny.bin",
+                "name": "Tiny Model",
+                "size": "75MB",
+                "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin"
+            },
+            {
+                "file": "ggml-base.bin",
+                "name": "Base Model",
+                "size": "142MB",
+                "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin",
+                "default": true
+            },
+            {
+                "file": "ggml-small.bin",
+                "name": "Small Model",
+                "size": "466MB",
+                "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin"
+            },
+            {
+                "file": "ggml-whisper-small-myanmar.bin",
+                "name": "Burmese Fine-Tuned Small",
+                "size": "466MB",
+                "url": "https://github.com/tinwinaung/SpeechBoleh/releases/download/models/ggml-whisper-small-myanmar.bin"
+            },
+            {
+                "file": "ggml-whisper-large-v3-myanmar.bin",
+                "name": "Burmese Fine-Tuned Large V3",
+                "size": "3.1GB",
+                "url": "https://github.com/tinwinaung/SpeechBoleh/releases/download/models/ggml-whisper-large-v3-myanmar.bin"
+            },
+            {
+                "file": "ggml-medium.bin",
+                "name": "Medium Model",
+                "size": "1.5GB",
+                "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.bin"
+            },
+            {
+                "file": "ggml-large-v3-turbo.bin",
+                "name": "Large V3 Turbo Model",
+                "size": "809MB",
+                "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin"
+            }
+        ]
+    }
+}
