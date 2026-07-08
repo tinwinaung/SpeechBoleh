@@ -53,7 +53,18 @@ const titleBarInfo = document.getElementById('title-bar-info');
 
 // Whisper Model Downloader & Diagnostics elements
 const modelSelect = document.getElementById('model-select');
+const languageSelect = document.getElementById('language-select');
 const btnPlayMic = document.getElementById('btn-play-mic');
+
+// Whisper Model Meta-information
+const WHISPER_MODEL_INFO = {
+  'ggml-tiny.bin': { name: 'Tiny Model', size: '75MB' },
+  'ggml-base.bin': { name: 'Base Model', size: '142MB' },
+  'ggml-small.bin': { name: 'Small Model', size: '466MB' },
+  'ggml-whisper-small-myanmar.bin': { name: 'Burmese Fine-Tuned Small', size: '466MB' },
+  'ggml-medium.bin': { name: 'Medium Model', size: '1.5GB' },
+  'ggml-large-v3-turbo.bin': { name: 'Large V3 Turbo Model', size: '809MB' }
+};
 const playMicIcon = document.getElementById('play-mic-icon');
 const modelDownloadOverlay = document.getElementById('model-download-overlay');
 const downloadProgressBar = document.getElementById('download-progress-bar');
@@ -813,11 +824,9 @@ async function syncModels() {
     // Update select options to indicate cached vs cloud status
     Array.from(modelSelect.options).forEach(opt => {
       const isDownloaded = availableModels.includes(opt.value);
-      if (isDownloaded) {
-        opt.innerText = opt.value === 'ggml-tiny.bin' ? 'Tiny Model (75MB) [Cached]' : 'Base Model (142MB) [Cached]';
-      } else {
-        opt.innerText = opt.value === 'ggml-tiny.bin' ? 'Tiny Model (75MB) [Cloud Download]' : 'Base Model (142MB) [Cloud Download]';
-      }
+      const info = WHISPER_MODEL_INFO[opt.value] || { name: opt.value, size: 'Unknown size' };
+      const statusText = isDownloaded ? '[Cached]' : '[Cloud Download]';
+      opt.innerText = `${info.name} (${info.size}) ${statusText}`;
     });
   } catch (err) {
     console.error('[Models] Sync failed:', err);
@@ -838,7 +847,8 @@ async function ensureModelDownloaded() {
     if (await isDownloadInProgress()) return false;
     // Show download UI
     modelDownloadOverlay.style.setProperty('display', 'flex', 'important');
-    downloadTitle.innerText = `Downloading ${targetModel === 'ggml-tiny.bin' ? 'Tiny Model' : 'Base Model'}`;
+    const info = WHISPER_MODEL_INFO[targetModel] || { name: targetModel };
+    downloadTitle.innerText = `Downloading ${info.name}`;
     downloadProgressBar.style.width = '0%';
     downloadBytes.innerText = '0 / 0 MB';
     downloadPct.innerText = '0%';
@@ -1187,7 +1197,8 @@ async function startRecording() {
         }
 
         // 2. Process transcription pipeline
-        const transRes = await window.api.sttTranscribe(rawMicPath);
+        const selectedLang = languageSelect ? languageSelect.value : 'auto';
+        const transRes = await window.api.sttTranscribe(rawMicPath, selectedLang);
 
         // Note: We do NOT delete rawMicPath here now, so the user can play it back to check audio levels.
         // It is cleaned up when a new recording starts or when the app closes.
@@ -1334,7 +1345,8 @@ async function processAudioUpload() {
       throw new Error('Required Whisper model file is not downloaded.');
     }
 
-    const res = await window.api.sttTranscribe(localFilePath);
+    const selectedLang = languageSelect ? languageSelect.value : 'auto';
+    const res = await window.api.sttTranscribe(localFilePath, selectedLang);
     if (res.success) {
       updateSttOutput(res.text);
       logStatus(`Transcribed uploaded audio file: ${selectedAudioFile.name}`, 'success');

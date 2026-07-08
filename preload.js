@@ -5,9 +5,10 @@ contextBridge.exposeInMainWorld('api', {
   /**
    * Transcribe an audio file (microphone capture or upload) via local whisper.cpp
    * @param {string} filePath - Absolute path to the source audio file
+   * @param {string} language - Target language code (e.g. 'my', 'en', 'auto')
    * @returns {Promise<{success: boolean, text?: string, error?: string}>}
    */
-  sttTranscribe: (filePath) => ipcRenderer.invoke('audio-stt', filePath),
+  sttTranscribe: (filePath, language) => ipcRenderer.invoke('audio-stt', filePath, language),
 
   /**
    * Saves raw microphone audio chunk buffer to the main process temp space

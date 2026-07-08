@@ -493,7 +493,7 @@ function transcodeToWhisperFormat(inputPath, outputPath) {
 }
 
 // 2. Invoke local whisper.cpp executable for transcription
-function transcribeWithWhisper(wavPath) {
+function transcribeWithWhisper(wavPath, language) {
   return new Promise((resolve, reject) => {
     const whisperCli = getAssetPath('bin', 'whisper', 'Release', 'whisper-cli.exe');
     const modelPath = getAssetPath('bin', 'whisper', 'Release', activeModel);
@@ -507,6 +507,9 @@ function transcribeWithWhisper(wavPath) {
 
     // Parameters: -m (model), -f (audio file), -nt (no timestamps), -np (no prints / clean output)
     const args = ['-m', modelPath, '-f', wavPath, '-nt', '-np'];
+    if (language && language !== 'auto') {
+      args.push('-l', language);
+    }
     console.log(`[Whisper.cpp] Running: ${whisperCli} ${args.join(' ')}`);
 
     execFile(whisperCli, args, (err, stdout, stderr) => {
@@ -521,14 +524,14 @@ function transcribeWithWhisper(wavPath) {
 }
 
 // IPC: STT Transcribe File/Buffer Handler
-ipcMain.handle('audio-stt', async (event, inputPath) => {
+ipcMain.handle('audio-stt', async (event, inputPath, language) => {
   const transOutPath = path.join(tmpDir, `transcoded_${Date.now()}.wav`);
   try {
     // 1. Transcode input audio
     await transcodeToWhisperFormat(inputPath, transOutPath);
 
     // 2. Run local transcription
-    const transcript = await transcribeWithWhisper(transOutPath);
+    const transcript = await transcribeWithWhisper(transOutPath, language);
 
     // 3. Clean up transcoded file immediately
     try {
@@ -953,6 +956,61 @@ ipcMain.handle('download-model', async (event, modelName) => {
 
   if (!fs.existsSync(whisperBinDir)) {
     fs.mkdirSync(whisperBinDir, { recursive: true });
+  }
+
+  if (modelName === 'ggml-whisper-small-myanmar.bin') {
+    console.log('[Model Downloader] Running local conversion for chuuhtetnaing/whisper-small-myanmar...');
+    return new Promise((resolve) => {
+      // Send initial progress
+      event.sender.send('whisper-download-progress', {
+        modelName: modelName,
+        downloaded: 0,
+        total: 100,
+        percentage: 5
+      });
+      
+      const scriptPath = path.join(tmpDir, 'convert_whisper_myanmar.py');
+      const p = spawn('uv', ['run', scriptPath], { cwd: app.getAppPath() });
+      
+      let percentage = 10;
+      p.stdout.on('data', (data) => {
+        const text = data.toString();
+        console.log(`[Convert Script] ${text.trim()}`);
+        if (text.includes('Loading configuration')) {
+          percentage = 20;
+        } else if (text.includes('Downloading mel_filters')) {
+          percentage = 35;
+        } else if (text.includes('Converting and writing')) {
+          percentage = 60;
+        } else if (text.includes('encoder.')) {
+          percentage = Math.min(95, percentage + 0.5);
+        }
+        event.sender.send('whisper-download-progress', {
+          modelName: modelName,
+          downloaded: Math.round(percentage),
+          total: 100,
+          percentage: Math.round(percentage)
+        });
+      });
+      
+      p.stderr.on('data', (data) => {
+        console.warn(`[Convert Script Error] ${data.toString()}`);
+      });
+      
+      p.on('close', (code) => {
+        if (code === 0) {
+          event.sender.send('whisper-download-progress', {
+            modelName: modelName,
+            downloaded: 100,
+            total: 100,
+            percentage: 100
+          });
+          resolve({ success: true });
+        } else {
+          resolve({ success: false, error: `Conversion script exited with code ${code}` });
+        }
+      });
+    });
   }
 
   return new Promise((resolve) => {
