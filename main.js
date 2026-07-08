@@ -161,17 +161,63 @@ function getConfPath() {
 function initConf() {
   const writablePath = getConfPath();
 
-  // In packaged mode, copy the bundled conf.json to the writable location on first run
-  if (app.isPackaged && !fs.existsSync(writablePath)) {
+  // Read app version from package.json (bundled with app)
+  let appVersion = '0.0.0';
+  try {
+    const pkgPath = path.join(__dirname, 'package.json');
+    if (fs.existsSync(pkgPath)) {
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+      appVersion = pkg.version || '0.0.0';
+    }
+  } catch (e) {
+    console.warn('[conf.json] Failed to read package.json version:', e.message);
+    try {
+      appVersion = app.getVersion();
+    } catch (_) {}
+  }
+
+  // Helper to extract bundled configuration to the writable path with the correct version
+  const extractConfig = () => {
     try {
       const bundledPath = path.join(__dirname, 'conf.json');
-      const bundledConf = fs.readFileSync(bundledPath, 'utf8');
-      // Ensure parent directory exists (e.g. portable dir may not have it yet)
+      const bundledConf = JSON.parse(fs.readFileSync(bundledPath, 'utf8'));
+      
+      if (!bundledConf.app) {
+        bundledConf.app = {};
+      }
+      bundledConf.app.version = appVersion;
+
       fs.mkdirSync(path.dirname(writablePath), { recursive: true });
-      fs.writeFileSync(writablePath, bundledConf, 'utf8');
-      console.log(`[conf.json] First run — copied bundled config to: ${writablePath}`);
-    } catch (copyErr) {
-      console.warn('[conf.json] Failed to copy bundled config to writable location:', copyErr.message);
+      fs.writeFileSync(writablePath, JSON.stringify(bundledConf, null, 4), 'utf8');
+      console.log(`[conf.json] Extracted/Updated config to version ${appVersion} at: ${writablePath}`);
+      return bundledConf;
+    } catch (err) {
+      console.error('[conf.json] Failed to extract config from bundle:', err.message);
+      return null;
+    }
+  };
+
+  // Packaged mode: first-run extract or version-gated re-extract
+  if (app.isPackaged) {
+    if (!fs.existsSync(writablePath)) {
+      console.log('[conf.json] Writable config file does not exist. Extracting...');
+      extractConfig();
+    } else {
+      try {
+        const rawConf = fs.readFileSync(writablePath, 'utf8');
+        const conf = JSON.parse(rawConf);
+        const currentConfVersion = conf.app?.version;
+
+        if (currentConfVersion !== appVersion) {
+          console.log(`[conf.json] Version mismatch (conf.json version: ${currentConfVersion}, package.json version: ${appVersion}). Re-extracting...`);
+          extractConfig();
+        } else {
+          console.log(`[conf.json] Version match (version: ${appVersion}). No extraction needed.`);
+        }
+      } catch (err) {
+        console.warn('[conf.json] Error reading existing config to check version, re-extracting:', err.message);
+        extractConfig();
+      }
     }
   }
 
