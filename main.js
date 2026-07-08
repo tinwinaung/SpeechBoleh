@@ -909,9 +909,10 @@ function isVersionNewer(local, remote) {
   return false;
 }
 
-// IPC: Check for updates online from GitHub package.json
+// IPC: Check for updates online from GitHub conf.json
 ipcMain.handle('check-for-updates', async () => {
-  const localVersion = app.getVersion();
+  const localConf = initConf();
+  const localVersion = (localConf.app && localConf.app.version) || '0.0.0';
   
   // 1. Get binary presence statuses
   const localFfmpeg = getAssetPath('bin', 'ffmpeg', 'bin', 'ffmpeg.exe');
@@ -934,21 +935,16 @@ ipcMain.handle('check-for-updates', async () => {
   const whisperLocalVersion = getLocalComponentVersion('whisper', whisperInstalled);
 
   try {
-    // 3. Fetch remote package.json for app version check + remote conf.json for component URLs
-    const [pkgResponse, confResponse] = await Promise.all([
-      fetch('https://raw.githubusercontent.com/tinwinaung/SpeechBoleh/main/package.json'),
-      fetch('https://raw.githubusercontent.com/tinwinaung/SpeechBoleh/main/conf.json')
-    ]);
-    if (!pkgResponse.ok) {
-      throw new Error(`Failed to fetch online package.json (status ${pkgResponse.status})`);
+    // 3. Fetch remote conf.json for app version check + component URLs (single source of truth)
+    const confResponse = await fetch('https://raw.githubusercontent.com/tinwinaung/SpeechBoleh/main/conf.json');
+    if (!confResponse.ok) {
+      throw new Error(`Failed to fetch online conf.json (status ${confResponse.status})`);
     }
-    const pkgData = await pkgResponse.json();
-    const remoteVersion = pkgData.version;
+    const data = await confResponse.json();
+    const remoteVersion = (data.app && data.app.version) || null;
     if (!remoteVersion) {
-      throw new Error('Version field not found in remote package.json');
+      throw new Error('Version field not found in remote conf.json');
     }
-
-    const data = confResponse.ok ? await confResponse.json() : {};
 
     const appUpdateAvailable = isVersionNewer(localVersion, remoteVersion);
 
