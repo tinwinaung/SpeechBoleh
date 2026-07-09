@@ -14,7 +14,7 @@
     "whisper"
   ],
   "author": "TIN WIN AUNG",
-  "license": "ISC",
+  "license": "AGPL-3.0-only",
   "dependencies": {
     "fluent-ffmpeg": "^2.1.3"
   },
