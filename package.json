@@ -1,6 +1,6 @@
 {
   "name": "SpeechBoleh",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Local Speech-to-Text and Text-to-Speech Desktop Application",
   "main": "main.js",
   "scripts": {

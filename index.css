@@ -13,9 +13,9 @@
   --text-secondary: #94a3b8;
   --border-glass: rgba(255, 255, 255, 0.08);
 
-  /* Override Bootstrap modal z-indexes to appear above custom title bar */
-  --bs-zindex-modal-backdrop: 10049;
-  --bs-zindex-modal: 10050;
+  /* Override Bootstrap modal z-indexes to appear above all overlays (max overlay = 10100) */
+  --bs-zindex-modal-backdrop: 10199;
+  --bs-zindex-modal: 10200;
 }
 
 body {
@@ -421,21 +421,22 @@ body {
   display: flex;
 }
 
-/* About / Update modals — cover full window including custom title bar */
+/* ---------------------------------------------------------------
+   All modals must sit above every overlay (highest = 10100).
+   Unified z-index ladder:
+     modal backdrop : 10199
+     all modals     : 10200
+   --------------------------------------------------------------- */
 #aboutModal,
-#updateModal {
-  z-index: 10050 !important;
+#updateModal,
+#appDialogModal {
+  z-index: 10200 !important;
 }
 
-#aboutModal .modal-backdrop,
-#updateModal .modal-backdrop,
-.modal-backdrop {
-  z-index: 10049 !important;
-}
-
-/* Ensure Bootstrap modal backdrop covers title bar */
+/* Single authoritative backdrop rule — covers title bar + all overlays */
+.modal-backdrop,
 body > .modal-backdrop {
-  z-index: 10049 !important;
+  z-index: 10199 !important;
 }
 
 /* Premium Segmented Controls / Tabbed Panels */
