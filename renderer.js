@@ -15,6 +15,8 @@ let generatedAudioUrl = null;
 let availableModels = [];
 let currentModel = 'ggml-base.bin';
 let lastMicRecordingPath = null; // Persists raw mic file for diagnostics
+let isEventListenersSetup = false; // Guard to prevent duplicate event listener registrations
+
 
 // UI Elements - STT
 const micTab = document.getElementById('mic-tab');
@@ -223,6 +225,63 @@ function showAppConfirm(message, title = "SpeechBoleh Confirmation") {
 // System Initialization
 // ----------------------------------------------------
 window.addEventListener('DOMContentLoaded', async () => {
+  // Set up VC++ missing overlay listener immediately before any async initialization steps
+  // to ensure we never miss the 'show-vcredist-required' IPC trigger sent right after load.
+  const vcredistOverlay   = document.getElementById('vcredist-overlay');
+  const vcredistArchBadge = document.getElementById('vcredist-arch-badge');
+  const vcredistStatus    = document.getElementById('vcredist-status');
+  const btnVcInstall      = document.getElementById('btn-vcredist-install');
+  const btnVcClose        = document.getElementById('btn-vcredist-close');
+
+  window.api.onVcRedistRequired(({ archKey, downloadUrl }) => {
+    if (vcredistArchBadge) vcredistArchBadge.innerText = archKey;
+    if (vcredistOverlay)   vcredistOverlay.style.setProperty('display', 'flex', 'important');
+    console.log(`[VC++ Overlay] Showing blocking overlay for arch: ${archKey}`);
+  });
+
+  // Bind VC++ overlay button actions synchronously here so they work immediately
+  // even if the rest of the application initialization fails or gets stuck.
+  if (btnVcInstall) {
+    btnVcInstall.addEventListener('click', async () => {
+      btnVcInstall.disabled = true;
+      btnVcInstall.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Downloading...';
+      if (vcredistStatus) vcredistStatus.innerText = 'Downloading Microsoft Visual C++ Redistributable installer...';
+
+      const res = await window.api.installVcRedist();
+      if (res && res.success) {
+        if (vcredistStatus) vcredistStatus.innerText = 'Microsoft Visual C++ Redistributable installed successfully! Proceeding to application...';
+        btnVcInstall.innerHTML = '<i class="bi bi-check-circle-fill me-2"></i>Installed Successfully';
+        btnVcInstall.className = btnVcInstall.className.replace('btn-warning', 'btn-success');
+        
+        // Hide Close button so user doesn't interrupt the startup transition
+        if (btnVcClose) {
+          btnVcClose.style.display = 'none';
+        }
+
+        // Wait 1.5s to show success state, then close overlay and proceed
+        setTimeout(async () => {
+          if (vcredistOverlay) vcredistOverlay.style.setProperty('display', 'none', 'important');
+          await runRemainingInitialization();
+        }, 1500);
+      } else if (res && res.installerCancelled) {
+        // Installer ran but user cancelled or it didn't complete — reset so they can try again
+        if (vcredistStatus) vcredistStatus.innerText = 'Installation was not completed. Please install to continue using speech features.';
+        btnVcInstall.disabled = false;
+        btnVcInstall.innerHTML = '<i class="bi bi-download me-2"></i>Try Again';
+      } else {
+        if (vcredistStatus) vcredistStatus.innerText = `Download failed: ${res?.error || 'Unknown error'}. Please install manually.`;
+        btnVcInstall.disabled = false;
+        btnVcInstall.innerHTML = '<i class="bi bi-download me-2"></i>Download &amp; Install';
+      }
+    });
+  }
+
+  if (btnVcClose) {
+    btnVcClose.addEventListener('click', () => {
+      window.api.quitApp();
+    });
+  }
+
   // Set version numbers dynamically from package.json
   try {
     const version = await window.api.getAppVersion();
@@ -244,11 +303,29 @@ window.addEventListener('DOMContentLoaded', async () => {
   await populateVoices();
   logStatus('Syncing offline Whisper model weights...', 'info');
   await initWhisperModels();
+
+  // Gate: if VC++ Redistributable was not installed at startup, skip all component
+  // downloads. The blocking overlay will appear via the 'show-vcredist-required' IPC event.
+  const vcRequired = await window.api.isVcRedistRequired();
+  if (vcRequired) {
+    logStatus('Microsoft Visual C++ Redistributable is required. Please install it to continue.', 'error');
+    console.warn('[Startup] VC++ Redistributable required — skipping component sync and first-run setup.');
+    setupEventListeners();
+    return;
+  }
+
+  await runRemainingInitialization();
+});
+
+// Helper: Performs/resumes the remaining part of startup initialization after VC++ is verified
+async function runRemainingInitialization() {
+  logStatus('Syncing offline Whisper model weights...', 'info');
   await syncModels();
   setupEventListeners();
-  
+
   const aboutGithubLink = document.getElementById('about-github-link');
   if (aboutGithubLink) {
+    // Re-bind only if event listeners setup hasn't run yet or run independently
     aboutGithubLink.addEventListener('click', (e) => {
       e.preventDefault();
       window.api.openExternalUrl('https://github.com/tinwinaung/SpeechBoleh');
@@ -259,7 +336,8 @@ window.addEventListener('DOMContentLoaded', async () => {
   await checkAndSetupFirstRun();
 
   logStatus('System ready. All offline pipelines successfully loaded.', 'success');
-});
+}
+
 
 // Automatic first-run setup checker
 async function checkAndSetupFirstRun() {
@@ -390,9 +468,12 @@ async function checkAndSetupFirstRun() {
       await window.api.setActiveModel(defaultModel);
     }
 
-    // 5. Download Piper default voice model (en_US-joe-medium.onnx) if missing
+    // 5. Download Piper default voice model (from conf.json) if missing
     if (missingPiperVoice) {
-      const defaultVoice = 'en_US-joe-medium.onnx';
+      if (PIPER_VOICE_INFO.length === 0) await initPiperVoices();
+      const defaultVoiceInfo = PIPER_VOICE_INFO.find(v => v.default) || PIPER_VOICE_INFO[0];
+      const defaultVoice = defaultVoiceInfo ? defaultVoiceInfo.file : 'en_US-lessac-medium.onnx';
+
       logStatus(`Downloading default Piper voice model (${defaultVoice})...`, 'system');
       if (descEl) descEl.innerText = `Downloading default voice synthesis model (${defaultVoice}). Please wait...`;
       downloadTitle.innerText = "Downloading Piper Voice";
@@ -968,6 +1049,9 @@ async function handleModelChange() {
 // Event Listeners Registration
 // ----------------------------------------------------
 function setupEventListeners() {
+  if (isEventListenersSetup) return;
+  isEventListenersSetup = true;
+
   // Model Select Dropdown
   modelSelect.addEventListener('change', handleModelChange);
 

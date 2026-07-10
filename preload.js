@@ -179,5 +179,35 @@ contextBridge.exposeInMainWorld('api', {
   checkDependencies: () => ipcRenderer.invoke('check-dependencies'),
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
-  openExternalUrl: (url) => ipcRenderer.invoke('open-external-url', url)
+  openExternalUrl: (url) => ipcRenderer.invoke('open-external-url', url),
+
+  /**
+   * Listen for VC++ Redistributable missing notification from main process
+   * @param {function} callback - Called with { archKey, downloadUrl }
+   */
+  onVcRedistRequired: (callback) => ipcRenderer.on('show-vcredist-required', (event, data) => callback(data)),
+
+  /**
+   * On-demand VC++ Redistributable check (call before any Whisper/Piper operation)
+   * @returns {Promise<{installed: boolean, archKey?: string, downloadUrl?: string}>}
+   */
+  checkVcRedist: () => ipcRenderer.invoke('check-vcredist'),
+
+  /**
+   * Quick flag check: is VC++ Redistributable still required?
+   * Reads the in-memory flag set by checkAndInstallMsvc — no registry hit.
+   * @returns {Promise<boolean>}
+   */
+  isVcRedistRequired: () => ipcRenderer.invoke('is-vcredist-required'),
+
+  /**
+   * Trigger VC++ Redistributable download and install from renderer
+   * @returns {Promise<{success: boolean, error?: string}>}
+   */
+  installVcRedist: () => ipcRenderer.invoke('install-vcredist'),
+
+  /**
+   * Quit the entire application
+   */
+  quitApp: () => ipcRenderer.send('quit-app')
 });

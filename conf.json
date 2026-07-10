@@ -1,6 +1,6 @@
 {
     "app": {
-        "version": "0.6.1"
+        "version": "0.7.0"
     },
     "pkg": {
         "ffmpeg": {
@@ -41,13 +41,13 @@
                 "file": "ggml-whisper-small-myanmar.bin",
                 "name": "Burmese Fine-Tuned Small",
                 "size": "466MB",
-                "url": "https://github.com/tinwinaung/SpeechBoleh/releases/download/models/ggml-whisper-small-myanmar.bin"
+                "url": "https://github.com/tinwinaung/SpeechBoleh/releases/download/whisper-mm-models/ggml-whisper-small-myanmar.bin"
             },
             {
                 "file": "ggml-whisper-large-v3-myanmar.bin",
                 "name": "Burmese Fine-Tuned Large V3",
                 "size": "3.1GB",
-                "url": "https://github.com/tinwinaung/SpeechBoleh/releases/download/models/ggml-whisper-large-v3-myanmar.bin"
+                "url": "https://github.com/tinwinaung/SpeechBoleh/releases/download/whisper-mm-models/ggml-whisper-large-v3-myanmar.bin"
             },
             {
                 "file": "ggml-medium.bin",
@@ -88,5 +88,9 @@
                 "file": "en_US-ryan-medium.onnx"
             }
         ]
+    },
+    "vc_redist": {
+        "win_arm64": "https://aka.ms/vc14/vc_redist.arm64.exe",
+        "win_x64": "https://aka.ms/vc14/vc_redist.x64.exe"
     }
 }

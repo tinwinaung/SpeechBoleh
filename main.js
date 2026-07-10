@@ -16,6 +16,9 @@ protocol.registerSchemesAsPrivileged([
 let mainWindow;
 let activeModel = 'ggml-base.bin';
 
+// Tracks VC++ redist state when user skips the initial dialog
+let vcRedistMissingInfo = null; // null = installed/unchecked, { archKey, downloadUrl } = missing & skipped
+
 // Helper to resolve paths to binaries/assets, handling ASAR unpacking automatically
 function getAssetPath(...parts) {
   let base;
@@ -359,6 +362,13 @@ function createWindow() {
   mainWindow.setMenu(null);
   mainWindow.loadFile('index.html');
 
+  // After the page loads, notify renderer if VC++ redist was skipped
+  mainWindow.webContents.on('did-finish-load', () => {
+    if (vcRedistMissingInfo) {
+      mainWindow.webContents.send('show-vcredist-required', vcRedistMissingInfo);
+    }
+  });
+
   mainWindow.on('maximize', () => {
     mainWindow.webContents.send('window-maximized-state', true);
   });
@@ -391,32 +401,105 @@ ipcMain.on('window-close', () => {
   if (mainWindow) mainWindow.close();
 });
 
+// IPC: Quit the entire application (used by VC++ redist blocking overlay)
+ipcMain.on('quit-app', () => {
+  app.quit();
+});
+
+// IPC: Trigger VC++ Redistributable download+install from the renderer blocking overlay
+ipcMain.handle('install-vcredist', async () => {
+  if (!vcRedistMissingInfo) return { success: true, alreadyInstalled: true };
+  const { archKey, downloadUrl } = vcRedistMissingInfo;
+  const redistTempPath = path.join(tmpDir, `vc_redist.${archKey}.exe`);
+  try {
+    console.log(`[System] Renderer-triggered VC++ download (${archKey}) from: ${downloadUrl}`);
+    await downloadUrlToFile(downloadUrl, redistTempPath);
+    console.log('[System] VC++ Redistributable download complete (renderer-triggered).');
+    await launchInstaller(redistTempPath);
+
+    // After installer closes, verify it actually installed successfully
+    if (isVcRedistRegistryInstalled()) {
+      console.log('[System] VC++ Redistributable installed successfully.');
+      vcRedistMissingInfo = null; // Clear only after confirmed success
+      return { success: true };
+    } else {
+      // Installer was cancelled or failed — keep the flag and re-trigger the overlay
+      console.warn('[System] VC++ Redistributable installer closed without completing installation.');
+      if (mainWindow) mainWindow.webContents.send('show-vcredist-required', { archKey, downloadUrl });
+      return { success: false, installerCancelled: true, archKey, downloadUrl };
+    }
+  } catch (err) {
+    console.error('[System] Renderer-triggered VC++ download failed:', err);
+    return { success: false, error: err.message };
+  }
+});
+
+// IPC: Quick flag check — is VC++ Redistributable still required?
+// Used by the renderer to gate the component download chain at startup.
+ipcMain.handle('is-vcredist-required', () => !!vcRedistMissingInfo);
+
+
 // ----------------------------------------------------
 // Microsoft Visual C++ Redistributable Checker
 // ----------------------------------------------------
-function checkAndInstallMsvc() {
+
+// Lightweight registry check — returns true if VC++ 2015-2022 Redistributable is installed
+function isVcRedistRegistryInstalled() {
+  if (process.platform !== 'win32') return true;
+  const isArm64 = process.arch === 'arm64';
+  const regKey = isArm64
+    ? 'HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\arm64'
+    : 'HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\x64';
+  try {
+    execSync(`reg query "${regKey}" /v Installed`, { stdio: 'ignore' });
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+async function checkAndInstallMsvc() {
   if (process.platform !== 'win32') return Promise.resolve();
 
   const { dialog } = require('electron');
-  let isInstalled = false;
 
+  // Detect system architecture: arm64 or x64 (ia32 treated as x64)
+  const isArm64 = process.arch === 'arm64';
+  const archKey = isArm64 ? 'arm64' : 'x64';
+  const confArchKey = isArm64 ? 'win_arm64' : 'win_x64';
+
+  // Load download URL from conf.json vc_redist section
+  let downloadUrl = isArm64
+    ? 'https://aka.ms/vc14/vc_redist.arm64.exe'
+    : 'https://aka.ms/vc14/vc_redist.x64.exe';
   try {
-    // Query registry for Visual C++ 2015-2022 Redistributable (x64)
-    execSync('reg query "HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\x64" /v Installed', { stdio: 'ignore' });
-    isInstalled = true;
+    const conf = initConf();
+    if (conf.vc_redist && conf.vc_redist[confArchKey]) {
+      downloadUrl = conf.vc_redist[confArchKey];
+      console.log(`[System] VC++ Redistributable URL from conf.json (${archKey}): ${downloadUrl}`);
+    }
+  } catch (e) {
+    console.warn('[System] Could not read vc_redist URL from conf.json, using built-in fallback.');
+  }
+
+  const redistFileName = `vc_redist.${archKey}.exe`;
+  const redistLocalPath = getAssetPath('bin', redistFileName);
+  const redistTempPath = path.join(tmpDir, redistFileName);
+
+  let isInstalled = false;
+  try {
+    // Use the shared helper for the registry check
+    isInstalled = isVcRedistRegistryInstalled();
   } catch (e) {
     isInstalled = false;
   }
 
   if (isInstalled) {
-    console.log('[System] Microsoft Visual C++ Redistributable runtime check passed.');
+    console.log(`[System] Microsoft Visual C++ Redistributable (${archKey}) runtime check passed.`);
     return Promise.resolve();
   }
 
-  const redistLocalPath = getAssetPath('bin', 'vc_redist.x64.exe');
-  const redistTempPath = path.join(tmpDir, 'vc_redist.x64.exe');
   let finalRedistPath = '';
-
   if (fs.existsSync(redistLocalPath)) {
     finalRedistPath = redistLocalPath;
   } else if (fs.existsSync(redistTempPath)) {
@@ -429,31 +512,38 @@ function checkAndInstallMsvc() {
       buttons: ['Install Now', 'Skip'],
       defaultId: 0,
       title: 'Microsoft Visual C++ Redistributable Required',
-      message: 'This application requires the Microsoft Visual C++ 2015-2022 Redistributable runtime to execute local speech processing models.\n\nIt was not detected on your system. Would you like to launch the installer now?',
+      message: `This application requires the Microsoft Visual C++ 2015-2022 Redistributable (${archKey}) runtime to execute local speech processing models.\n\nIt was not detected on your system. Would you like to launch the installer now?`,
       cancelId: 1
     });
 
     if (choice === 0) {
-      return launchInstaller(finalRedistPath);
+      await launchInstaller(finalRedistPath);
+      // Check if installation actually completed after installer closes
+      if (!isVcRedistRegistryInstalled()) {
+        console.warn('[System] Bundled installer closed without completing — overlay will be shown.');
+        vcRedistMissingInfo = { archKey, downloadUrl };
+      }
+      return;
     }
+    // User skipped — flag so the renderer can show the blocking overlay
+    vcRedistMissingInfo = { archKey, downloadUrl };
     return Promise.resolve();
   } else {
-    // Both installer files are missing. Offer to download.
+    // Installer not bundled — offer to download from conf.json URL
     const choice = dialog.showMessageBoxSync({
       type: 'warning',
       buttons: ['Download & Install', 'Skip'],
       defaultId: 0,
       title: 'Microsoft Visual C++ Redistributable Required',
-      message: 'This application requires the Microsoft Visual C++ 2015-2022 Redistributable runtime to execute local speech models.\n\nWould you like to download and install it automatically now (approx. 24MB)?',
+      message: `This application requires the Microsoft Visual C++ 2015-2022 Redistributable (${archKey}) runtime to execute local speech models.\n\nWould you like to download and install it automatically now (approx. 24MB)?`,
       cancelId: 1
     });
 
     if (choice === 0) {
-      console.log('[System] Downloading VC++ Redistributable installer...');
-      const downloadUrl = 'https://aka.ms/vs/17/release/vc_redist.x64.exe';
-      
+      console.log(`[System] Downloading VC++ Redistributable (${archKey}) from: ${downloadUrl}`);
+
       return downloadUrlToFile(downloadUrl, redistTempPath)
-        .then(() => {
+        .then(async () => {
           console.log('[System] VC++ Redistributable download complete.');
           const installChoice = dialog.showMessageBoxSync({
             type: 'info',
@@ -463,19 +553,30 @@ function checkAndInstallMsvc() {
             message: 'The Microsoft Visual C++ Redistributable installer was downloaded successfully. Would you like to run it now?'
           });
           if (installChoice === 0) {
-            return launchInstaller(redistTempPath);
+            await launchInstaller(redistTempPath);
+            // After installer closes, check if it actually completed
+            if (!isVcRedistRegistryInstalled()) {
+              console.warn('[System] Installer closed without completing — overlay will be shown.');
+              vcRedistMissingInfo = { archKey, downloadUrl };
+            }
+            return;
           }
-          return Promise.resolve();
+          // User clicked Later — flag so the overlay is shown when window loads
+          console.log('[System] User deferred installer — overlay will be shown.');
+          vcRedistMissingInfo = { archKey, downloadUrl };
         })
         .catch((err) => {
           console.error('[System] Failed to download VC++ Redistributable:', err);
           dialog.showErrorBox(
             'Download Failed',
-            `Failed to download the VC++ Redistributable installer:\n${err.message}\n\nPlease install it manually from: https://aka.ms/vs/17/release/vc_redist.x64.exe`
+            `Failed to download the VC++ Redistributable installer (${archKey}):\n${err.message}\n\nPlease install it manually from:\n${downloadUrl}`
           );
-          return Promise.resolve();
+          // Even on download failure, flag the overlay so user knows it's still needed
+          vcRedistMissingInfo = { archKey, downloadUrl };
         });
     }
+    // User skipped — flag so the renderer can show the blocking overlay
+    vcRedistMissingInfo = { archKey, downloadUrl };
     return Promise.resolve();
   }
 }
@@ -1212,11 +1313,19 @@ function downloadUrlToFile(downloadUrl, destPath, onProgress) {
         file.on('finish', () => {
           file.close();
           try {
-            if (fs.existsSync(destPath)) fs.unlinkSync(destPath);
+            // Try atomic rename first (works even when destPath already exists on same drive)
             fs.renameSync(tempDestPath, destPath);
             resolve();
-          } catch (err) {
-            reject(err);
+          } catch (renameErr) {
+            // Rename may fail if destination is locked by a previous installer process.
+            // Fall back to copy + silent temp cleanup.
+            try {
+              fs.copyFileSync(tempDestPath, destPath);
+              try { fs.unlinkSync(tempDestPath); } catch (e) { /* ignore temp cleanup failure */ }
+              resolve();
+            } catch (copyErr) {
+              reject(copyErr);
+            }
           }
         });
       });
