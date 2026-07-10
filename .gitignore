@@ -151,3 +151,4 @@ SpeechBoleh*.zip
 SpeechBoleh/
 tmp/*
 doc/
+tools/stt_hg2ggml/*.bin
