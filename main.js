@@ -16,6 +16,9 @@ protocol.registerSchemesAsPrivileged([
 let mainWindow;
 let activeModel = 'ggml-base.bin';
 
+// Tracks VC++ redist state when user skips the initial dialog
+let vcRedistMissingInfo = null; // null = installed/unchecked, { archKey, downloadUrl } = missing & skipped
+
 // Helper to resolve paths to binaries/assets, handling ASAR unpacking automatically
 function getAssetPath(...parts) {
   let base;
@@ -359,6 +362,13 @@ function createWindow() {
   mainWindow.setMenu(null);
   mainWindow.loadFile('index.html');
 
+  // After the page loads, notify renderer if VC++ redist was skipped
+  mainWindow.webContents.on('did-finish-load', () => {
+    if (vcRedistMissingInfo) {
+      mainWindow.webContents.send('show-vcredist-required', vcRedistMissingInfo);
+    }
+  });
+
   mainWindow.on('maximize', () => {
     mainWindow.webContents.send('window-maximized-state', true);
   });
@@ -389,6 +399,29 @@ ipcMain.on('window-maximize', () => {
 
 ipcMain.on('window-close', () => {
   if (mainWindow) mainWindow.close();
+});
+
+// IPC: Quit the entire application (used by VC++ redist blocking overlay)
+ipcMain.on('quit-app', () => {
+  app.quit();
+});
+
+// IPC: Trigger VC++ Redistributable download+install from the renderer blocking overlay
+ipcMain.handle('install-vcredist', async () => {
+  if (!vcRedistMissingInfo) return { success: true, alreadyInstalled: true };
+  const { archKey, downloadUrl } = vcRedistMissingInfo;
+  const redistTempPath = path.join(tmpDir, `vc_redist.${archKey}.exe`);
+  try {
+    console.log(`[System] Renderer-triggered VC++ download (${archKey}) from: ${downloadUrl}`);
+    await downloadUrlToFile(downloadUrl, redistTempPath);
+    console.log('[System] VC++ Redistributable download complete (renderer-triggered).');
+    vcRedistMissingInfo = null; // Clear the flag
+    await launchInstaller(redistTempPath);
+    return { success: true };
+  } catch (err) {
+    console.error('[System] Renderer-triggered VC++ download failed:', err);
+    return { success: false, error: err.message };
+  }
 });
 
 // ----------------------------------------------------
@@ -459,6 +492,8 @@ function checkAndInstallMsvc() {
     if (choice === 0) {
       return launchInstaller(finalRedistPath);
     }
+    // User skipped — flag so the renderer can show the blocking overlay
+    vcRedistMissingInfo = { archKey, downloadUrl };
     return Promise.resolve();
   } else {
     // Installer not bundled — offer to download from conf.json URL
@@ -498,6 +533,8 @@ function checkAndInstallMsvc() {
           return Promise.resolve();
         });
     }
+    // User skipped — flag so the renderer can show the blocking overlay
+    vcRedistMissingInfo = { archKey, downloadUrl };
     return Promise.resolve();
   }
 }

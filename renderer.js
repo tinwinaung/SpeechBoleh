@@ -223,6 +223,46 @@ function showAppConfirm(message, title = "SpeechBoleh Confirmation") {
 // System Initialization
 // ----------------------------------------------------
 window.addEventListener('DOMContentLoaded', async () => {
+  // Set up VC++ missing overlay listener immediately before any async initialization steps
+  // to ensure we never miss the 'show-vcredist-required' IPC trigger sent right after load.
+  const vcredistOverlay   = document.getElementById('vcredist-overlay');
+  const vcredistArchBadge = document.getElementById('vcredist-arch-badge');
+  const vcredistStatus    = document.getElementById('vcredist-status');
+  const btnVcInstall      = document.getElementById('btn-vcredist-install');
+  const btnVcClose        = document.getElementById('btn-vcredist-close');
+
+  window.api.onVcRedistRequired(({ archKey, downloadUrl }) => {
+    if (vcredistArchBadge) vcredistArchBadge.innerText = archKey;
+    if (vcredistOverlay)   vcredistOverlay.style.setProperty('display', 'flex', 'important');
+    console.log(`[VC++ Overlay] Showing blocking overlay for arch: ${archKey}`);
+  });
+
+  // Bind VC++ overlay button actions synchronously here so they work immediately
+  // even if the rest of the application initialization fails or gets stuck.
+  if (btnVcInstall) {
+    btnVcInstall.addEventListener('click', async () => {
+      btnVcInstall.disabled = true;
+      btnVcInstall.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Downloading...';
+      if (vcredistStatus) vcredistStatus.innerText = 'Downloading Microsoft Visual C++ Redistributable installer...';
+
+      const res = await window.api.installVcRedist();
+      if (res && res.success) {
+        if (vcredistStatus) vcredistStatus.innerText = 'Installer launched. Please complete the installation, then restart the application.';
+        btnVcInstall.innerHTML = '<i class="bi bi-check-circle-fill me-2"></i>Installer Running';
+      } else {
+        if (vcredistStatus) vcredistStatus.innerText = `Download failed: ${res?.error || 'Unknown error'}. Please install manually.`;
+        btnVcInstall.disabled = false;
+        btnVcInstall.innerHTML = '<i class="bi bi-download me-2"></i>Download &amp; Install';
+      }
+    });
+  }
+
+  if (btnVcClose) {
+    btnVcClose.addEventListener('click', () => {
+      window.api.quitApp();
+    });
+  }
+
   // Set version numbers dynamically from package.json
   try {
     const version = await window.api.getAppVersion();

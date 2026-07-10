@@ -179,5 +179,22 @@ contextBridge.exposeInMainWorld('api', {
   checkDependencies: () => ipcRenderer.invoke('check-dependencies'),
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
-  openExternalUrl: (url) => ipcRenderer.invoke('open-external-url', url)
+  openExternalUrl: (url) => ipcRenderer.invoke('open-external-url', url),
+
+  /**
+   * Listen for VC++ Redistributable missing notification from main process
+   * @param {function} callback - Called with { archKey, downloadUrl }
+   */
+  onVcRedistRequired: (callback) => ipcRenderer.on('show-vcredist-required', (event, data) => callback(data)),
+
+  /**
+   * Trigger VC++ Redistributable download and install from renderer
+   * @returns {Promise<{success: boolean, error?: string}>}
+   */
+  installVcRedist: () => ipcRenderer.invoke('install-vcredist'),
+
+  /**
+   * Quit the entire application
+   */
+  quitApp: () => ipcRenderer.send('quit-app')
 });

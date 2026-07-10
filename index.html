@@ -629,6 +629,37 @@
     </div>
   </div>
 
+  <!-- VC++ Redistributable Blocking Overlay (shown when user skips the initial install dialog) -->
+  <div id="vcredist-overlay" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; z-index:10300; background:rgba(6,8,18,0.97); backdrop-filter:blur(12px); align-items:center; justify-content:center; flex-direction:column;">
+    <div style="max-width:520px; width:90%; text-align:center;">
+      <!-- Icon -->
+      <div class="mb-4" style="font-size:4rem; line-height:1;">
+        <i class="bi bi-exclamation-triangle-fill text-warning" style="filter:drop-shadow(0 0 24px rgba(250,204,21,0.45));"></i>
+      </div>
+      <!-- Title -->
+      <h2 class="fw-bold text-white mb-2" style="font-size:1.5rem; letter-spacing:-0.02em;">Runtime Dependency Missing</h2>
+      <p class="text-secondary mb-1" style="font-size:0.9rem;">Microsoft Visual C++ 2015–2022 Redistributable</p>
+      <!-- Arch badge -->
+      <span id="vcredist-arch-badge" class="badge bg-warning text-dark fw-semibold mb-4 px-3 py-2" style="font-size:0.75rem; border-radius:20px;">x64</span>
+      <!-- Description -->
+      <p class="text-secondary mb-5" style="font-size:0.85rem; line-height:1.7;">
+        This application requires the <strong class="text-white">Microsoft Visual C++ Redistributable</strong> runtime to execute local speech processing models (Whisper &amp; Piper). Without it, transcription and text-to-speech will not function.<br><br>
+        Please download and install it to continue using SpeechBoleh.
+      </p>
+      <!-- Buttons -->
+      <div class="d-flex gap-3 justify-content-center flex-wrap">
+        <button id="btn-vcredist-install" class="btn btn-warning fw-bold px-4 py-2" style="border-radius:10px; font-size:0.9rem; min-width:200px; box-shadow:0 0 20px rgba(250,204,21,0.3);">
+          <i class="bi bi-download me-2"></i>Download &amp; Install
+        </button>
+        <button id="btn-vcredist-close" class="btn btn-outline-secondary fw-semibold px-4 py-2" style="border-radius:10px; font-size:0.9rem; min-width:160px;">
+          <i class="bi bi-x-circle me-2"></i>Close Application
+        </button>
+      </div>
+      <!-- Status message area -->
+      <p id="vcredist-status" class="mt-4 small text-secondary" style="min-height:1.5em;"></p>
+    </div>
+  </div>
+
   <!-- Bootstrap 5 JavaScript Bundle (Local) -->
   <script src="./assets/bootstrap/js/bootstrap.bundle.min.js"></script>
   <!-- Main Frontend Application Logic -->
