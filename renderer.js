@@ -247,8 +247,14 @@ window.addEventListener('DOMContentLoaded', async () => {
 
       const res = await window.api.installVcRedist();
       if (res && res.success) {
-        if (vcredistStatus) vcredistStatus.innerText = 'Installer launched. Please complete the installation, then restart the application.';
-        btnVcInstall.innerHTML = '<i class="bi bi-check-circle-fill me-2"></i>Installer Running';
+        if (vcredistStatus) vcredistStatus.innerText = 'Microsoft Visual C++ Redistributable installed successfully! You may now use all speech features.';
+        btnVcInstall.innerHTML = '<i class="bi bi-check-circle-fill me-2"></i>Installed Successfully';
+        btnVcInstall.className = btnVcInstall.className.replace('btn-warning', 'btn-success');
+      } else if (res && res.installerCancelled) {
+        // Installer ran but user cancelled or it didn't complete — reset so they can try again
+        if (vcredistStatus) vcredistStatus.innerText = 'Installation was not completed. Please install to continue using speech features.';
+        btnVcInstall.disabled = false;
+        btnVcInstall.innerHTML = '<i class="bi bi-download me-2"></i>Try Again';
       } else {
         if (vcredistStatus) vcredistStatus.innerText = `Download failed: ${res?.error || 'Unknown error'}. Please install manually.`;
         btnVcInstall.disabled = false;
@@ -284,8 +290,20 @@ window.addEventListener('DOMContentLoaded', async () => {
   await populateVoices();
   logStatus('Syncing offline Whisper model weights...', 'info');
   await initWhisperModels();
+
+  // Gate: if VC++ Redistributable was not installed at startup, skip all component
+  // downloads. The blocking overlay will appear via the 'show-vcredist-required' IPC event.
+  const vcRequired = await window.api.isVcRedistRequired();
+  if (vcRequired) {
+    logStatus('Microsoft Visual C++ Redistributable is required. Please install it to continue.', 'error');
+    console.warn('[Startup] VC++ Redistributable required — skipping component sync and first-run setup.');
+    setupEventListeners();
+    return;
+  }
+
   await syncModels();
   setupEventListeners();
+
   
   const aboutGithubLink = document.getElementById('about-github-link');
   if (aboutGithubLink) {

@@ -415,19 +415,50 @@ ipcMain.handle('install-vcredist', async () => {
     console.log(`[System] Renderer-triggered VC++ download (${archKey}) from: ${downloadUrl}`);
     await downloadUrlToFile(downloadUrl, redistTempPath);
     console.log('[System] VC++ Redistributable download complete (renderer-triggered).');
-    vcRedistMissingInfo = null; // Clear the flag
     await launchInstaller(redistTempPath);
-    return { success: true };
+
+    // After installer closes, verify it actually installed successfully
+    if (isVcRedistRegistryInstalled()) {
+      console.log('[System] VC++ Redistributable installed successfully.');
+      vcRedistMissingInfo = null; // Clear only after confirmed success
+      return { success: true };
+    } else {
+      // Installer was cancelled or failed — keep the flag and re-trigger the overlay
+      console.warn('[System] VC++ Redistributable installer closed without completing installation.');
+      if (mainWindow) mainWindow.webContents.send('show-vcredist-required', { archKey, downloadUrl });
+      return { success: false, installerCancelled: true, archKey, downloadUrl };
+    }
   } catch (err) {
     console.error('[System] Renderer-triggered VC++ download failed:', err);
     return { success: false, error: err.message };
   }
 });
 
+// IPC: Quick flag check — is VC++ Redistributable still required?
+// Used by the renderer to gate the component download chain at startup.
+ipcMain.handle('is-vcredist-required', () => !!vcRedistMissingInfo);
+
+
 // ----------------------------------------------------
 // Microsoft Visual C++ Redistributable Checker
 // ----------------------------------------------------
-function checkAndInstallMsvc() {
+
+// Lightweight registry check — returns true if VC++ 2015-2022 Redistributable is installed
+function isVcRedistRegistryInstalled() {
+  if (process.platform !== 'win32') return true;
+  const isArm64 = process.arch === 'arm64';
+  const regKey = isArm64
+    ? 'HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\arm64'
+    : 'HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\x64';
+  try {
+    execSync(`reg query "${regKey}" /v Installed`, { stdio: 'ignore' });
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+async function checkAndInstallMsvc() {
   if (process.platform !== 'win32') return Promise.resolve();
 
   const { dialog } = require('electron');
@@ -457,12 +488,8 @@ function checkAndInstallMsvc() {
 
   let isInstalled = false;
   try {
-    // Query architecture-specific registry key for VC++ 2015-2022 Redistributable
-    const regKey = isArm64
-      ? 'HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\arm64'
-      : 'HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\x64';
-    execSync(`reg query "${regKey}" /v Installed`, { stdio: 'ignore' });
-    isInstalled = true;
+    // Use the shared helper for the registry check
+    isInstalled = isVcRedistRegistryInstalled();
   } catch (e) {
     isInstalled = false;
   }
@@ -490,7 +517,13 @@ function checkAndInstallMsvc() {
     });
 
     if (choice === 0) {
-      return launchInstaller(finalRedistPath);
+      await launchInstaller(finalRedistPath);
+      // Check if installation actually completed after installer closes
+      if (!isVcRedistRegistryInstalled()) {
+        console.warn('[System] Bundled installer closed without completing — overlay will be shown.');
+        vcRedistMissingInfo = { archKey, downloadUrl };
+      }
+      return;
     }
     // User skipped — flag so the renderer can show the blocking overlay
     vcRedistMissingInfo = { archKey, downloadUrl };
@@ -510,7 +543,7 @@ function checkAndInstallMsvc() {
       console.log(`[System] Downloading VC++ Redistributable (${archKey}) from: ${downloadUrl}`);
 
       return downloadUrlToFile(downloadUrl, redistTempPath)
-        .then(() => {
+        .then(async () => {
           console.log('[System] VC++ Redistributable download complete.');
           const installChoice = dialog.showMessageBoxSync({
             type: 'info',
@@ -520,9 +553,17 @@ function checkAndInstallMsvc() {
             message: 'The Microsoft Visual C++ Redistributable installer was downloaded successfully. Would you like to run it now?'
           });
           if (installChoice === 0) {
-            return launchInstaller(redistTempPath);
+            await launchInstaller(redistTempPath);
+            // After installer closes, check if it actually completed
+            if (!isVcRedistRegistryInstalled()) {
+              console.warn('[System] Installer closed without completing — overlay will be shown.');
+              vcRedistMissingInfo = { archKey, downloadUrl };
+            }
+            return;
           }
-          return Promise.resolve();
+          // User clicked Later — flag so the overlay is shown when window loads
+          console.log('[System] User deferred installer — overlay will be shown.');
+          vcRedistMissingInfo = { archKey, downloadUrl };
         })
         .catch((err) => {
           console.error('[System] Failed to download VC++ Redistributable:', err);
@@ -530,7 +571,8 @@ function checkAndInstallMsvc() {
             'Download Failed',
             `Failed to download the VC++ Redistributable installer (${archKey}):\n${err.message}\n\nPlease install it manually from:\n${downloadUrl}`
           );
-          return Promise.resolve();
+          // Even on download failure, flag the overlay so user knows it's still needed
+          vcRedistMissingInfo = { archKey, downloadUrl };
         });
     }
     // User skipped — flag so the renderer can show the blocking overlay
