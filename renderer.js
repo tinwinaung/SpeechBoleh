@@ -748,28 +748,27 @@ async function triggerCheckUpdateFlow() {
       const itemDiv = document.createElement('div');
       itemDiv.className = 'p-3 bg-dark bg-opacity-50 border border-secondary border-opacity-15 rounded-3 d-flex align-items-center justify-content-between';
 
-      // Badge details & action button
-      let statusBadgeHtml = '';
-      let actionBtnHtml = '';
+      // Status icon shown inline next to component name
+      let statusIconHtml = '';
 
       if (key === 'app') {
         if (data.updateAvailable) {
-          statusBadgeHtml = `<span class="badge bg-warning bg-opacity-20 text-warning border border-warning border-opacity-20 px-2.5 py-1.5 rounded-pill"><i class="bi bi-exclamation-triangle-fill me-1"></i>Update Available</span>`;
-          actionBtnHtml = `<button class="btn btn-cyan btn-sm py-1 px-3 rounded-pill" style="font-size: 0.7rem;" id="btn-update-app"><i class="bi bi-box-arrow-up-right me-1"></i>Releases</button>`;
+          statusIconHtml = `<i class="bi bi-exclamation-triangle-fill text-warning me-2" title="Update Available" style="font-size:1rem;"></i>`;
+          actionBtnHtml = `<button class="btn btn-cyan btn-sm py-1 rounded-pill" style="font-size: 0.7rem; width: 100px;" id="btn-update-app"><i class="bi bi-box-arrow-up-right me-1"></i>Releases</button>`;
         } else {
-          statusBadgeHtml = `<span class="badge bg-success bg-opacity-20 text-success border border-success border-opacity-20 px-2.5 py-1.5 rounded-pill"><i class="bi bi-shield-fill-check me-1"></i>Up to Date</span>`;
-          actionBtnHtml = `<button class="btn btn-outline-secondary btn-sm py-1 px-3 rounded-pill disabled" style="font-size: 0.7rem;"><i class="bi bi-check-lg me-1"></i>Latest</button>`;
+          statusIconHtml = `<i class="bi bi-check-circle-fill text-success me-2" title="Up to Date" style="font-size:1rem;"></i>`;
+          actionBtnHtml = `<button class="btn btn-outline-secondary btn-sm py-1 rounded-pill disabled" style="font-size: 0.7rem; width: 100px;"><i class="bi bi-check-lg me-1"></i>Latest</button>`;
         }
       } else {
         if (data.local === 'Not Installed') {
-          statusBadgeHtml = `<span class="badge bg-danger bg-opacity-20 text-danger border border-danger border-opacity-20 px-2.5 py-1.5 rounded-pill"><i class="bi bi-exclamation-octagon-fill me-1"></i>Not Installed</span>`;
-          actionBtnHtml = `<button class="btn btn-cyan btn-sm py-1 px-3 rounded-pill action-install-btn" style="font-size: 0.7rem;" data-component="${key}" data-url="${data.url}" data-version="${data.remote}"><i class="bi bi-cloud-arrow-down-fill me-1"></i>Install</button>`;
+          statusIconHtml = `<i class="bi bi-exclamation-octagon-fill text-danger me-2" title="Not Installed" style="font-size:1rem;"></i>`;
+          actionBtnHtml = `<button class="btn btn-cyan btn-sm py-1 rounded-pill action-install-btn" style="font-size: 0.7rem; width: 100px;" data-component="${key}" data-url="${data.url}" data-version="${data.remote}"><i class="bi bi-cloud-arrow-down-fill me-1"></i>Install</button>`;
         } else if (data.updateAvailable) {
-          statusBadgeHtml = `<span class="badge bg-warning bg-opacity-20 text-warning border border-warning border-opacity-20 px-2.5 py-1.5 rounded-pill"><i class="bi bi-arrow-clockwise me-1"></i>Update Available</span>`;
-          actionBtnHtml = `<button class="btn btn-cyan btn-sm py-1 px-3 rounded-pill action-install-btn" style="font-size: 0.7rem;" data-component="${key}" data-url="${data.url}" data-version="${data.remote}"><i class="bi bi-arrow-down-circle-fill me-1"></i>Update</button>`;
+          statusIconHtml = `<i class="bi bi-exclamation-triangle-fill text-warning me-2" title="Update Available" style="font-size:1rem;"></i>`;
+          actionBtnHtml = `<button class="btn btn-cyan btn-sm py-1 rounded-pill action-install-btn" style="font-size: 0.7rem; width: 100px;" data-component="${key}" data-url="${data.url}" data-version="${data.remote}"><i class="bi bi-arrow-down-circle-fill me-1"></i>Update</button>`;
         } else {
-          statusBadgeHtml = `<span class="badge bg-success bg-opacity-20 text-success border border-success border-opacity-20 px-2.5 py-1.5 rounded-pill"><i class="bi bi-shield-fill-check me-1"></i>Installed</span>`;
-          actionBtnHtml = `<button class="btn btn-outline-secondary btn-sm py-1 px-3 rounded-pill action-install-btn" style="font-size: 0.7rem;" data-component="${key}" data-url="${data.url}" data-version="${data.remote}"><i class="bi bi-arrow-counterclockwise me-1"></i>Reinstall</button>`;
+          statusIconHtml = `<i class="bi bi-check-circle-fill text-success me-2" title="Installed" style="font-size:1rem;"></i>`;
+          actionBtnHtml = `<button class="btn btn-outline-secondary btn-sm py-1 rounded-pill action-install-btn" style="font-size: 0.7rem; width: 100px;" data-component="${key}" data-url="${data.url}" data-version="${data.remote}"><i class="bi bi-arrow-counterclockwise me-1"></i>Reinstall</button>`;
         }
       }
 
@@ -779,12 +778,11 @@ async function triggerCheckUpdateFlow() {
             <i class="bi ${details.icon} ${details.color} fs-5"></i>
           </div>
           <div>
-            <h6 class="m-0 fw-bold text-white">${details.name}</h6>
+            <h6 class="m-0 fw-bold text-white d-flex align-items-center">${statusIconHtml}${details.name}</h6>
             <span class="small text-secondary" style="font-size: 0.7rem;">Local: <strong>${data.local}</strong> | Latest: <strong>${data.remote}</strong></span>
           </div>
         </div>
         <div class="d-flex align-items-center gap-2">
-          ${statusBadgeHtml}
           ${actionBtnHtml}
         </div>
       `;
