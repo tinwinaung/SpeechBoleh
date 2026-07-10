@@ -753,22 +753,22 @@ async function triggerCheckUpdateFlow() {
 
       if (key === 'app') {
         if (data.updateAvailable) {
-          statusIconHtml = `<i class="bi bi-exclamation-triangle-fill text-warning me-2" title="Update Available" style="font-size:1rem;"></i>`;
-          actionBtnHtml = `<button class="btn btn-cyan btn-sm py-1 rounded-pill" style="font-size: 0.7rem; width: 100px;" id="btn-update-app"><i class="bi bi-box-arrow-up-right me-1"></i>Releases</button>`;
+          statusIconHtml = `<i class="bi bi-exclamation-triangle-fill text-warning" title="Update Available" style="font-size:1.1rem;"></i>`;
+          actionBtnHtml = `<button class="btn btn-cyan btn-sm py-1 rounded-pill" style="font-size: 0.7rem; width: 100px;" id="btn-update-app"><i class="bi bi-github me-1"></i>Releases</button>`;
         } else {
-          statusIconHtml = `<i class="bi bi-check-circle-fill text-success me-2" title="Up to Date" style="font-size:1rem;"></i>`;
-          actionBtnHtml = `<button class="btn btn-outline-secondary btn-sm py-1 rounded-pill disabled" style="font-size: 0.7rem; width: 100px;"><i class="bi bi-check-lg me-1"></i>Latest</button>`;
+          statusIconHtml = `<i class="bi bi-check-circle-fill text-success" title="Up to Date" style="font-size:1.1rem;"></i>`;
+          actionBtnHtml = `<button class="btn btn-outline-secondary btn-sm py-1 rounded-pill disabled" style="font-size: 0.7rem; width: 100px;"><i class="bi bi-shield-check me-1"></i>Latest</button>`;
         }
       } else {
         if (data.local === 'Not Installed') {
-          statusIconHtml = `<i class="bi bi-exclamation-octagon-fill text-danger me-2" title="Not Installed" style="font-size:1rem;"></i>`;
-          actionBtnHtml = `<button class="btn btn-cyan btn-sm py-1 rounded-pill action-install-btn" style="font-size: 0.7rem; width: 100px;" data-component="${key}" data-url="${data.url}" data-version="${data.remote}"><i class="bi bi-cloud-arrow-down-fill me-1"></i>Install</button>`;
+          statusIconHtml = `<i class="bi bi-exclamation-octagon-fill text-danger" title="Not Installed" style="font-size:1.1rem;"></i>`;
+          actionBtnHtml = `<button class="btn btn-cyan btn-sm py-1 rounded-pill action-install-btn" style="font-size: 0.7rem; width: 100px;" data-component="${key}" data-url="${data.url}" data-version="${data.remote}"><i class="bi bi-download me-1"></i>Install</button>`;
         } else if (data.updateAvailable) {
-          statusIconHtml = `<i class="bi bi-exclamation-triangle-fill text-warning me-2" title="Update Available" style="font-size:1rem;"></i>`;
-          actionBtnHtml = `<button class="btn btn-cyan btn-sm py-1 rounded-pill action-install-btn" style="font-size: 0.7rem; width: 100px;" data-component="${key}" data-url="${data.url}" data-version="${data.remote}"><i class="bi bi-arrow-down-circle-fill me-1"></i>Update</button>`;
+          statusIconHtml = `<i class="bi bi-exclamation-triangle-fill text-warning" title="Update Available" style="font-size:1.1rem;"></i>`;
+          actionBtnHtml = `<button class="btn btn-cyan btn-sm py-1 rounded-pill action-install-btn" style="font-size: 0.7rem; width: 100px;" data-component="${key}" data-url="${data.url}" data-version="${data.remote}"><i class="bi bi-cloud-download me-1"></i>Update</button>`;
         } else {
-          statusIconHtml = `<i class="bi bi-check-circle-fill text-success me-2" title="Installed" style="font-size:1rem;"></i>`;
-          actionBtnHtml = `<button class="btn btn-outline-secondary btn-sm py-1 rounded-pill action-install-btn" style="font-size: 0.7rem; width: 100px;" data-component="${key}" data-url="${data.url}" data-version="${data.remote}"><i class="bi bi-arrow-counterclockwise me-1"></i>Reinstall</button>`;
+          statusIconHtml = `<i class="bi bi-check-circle-fill text-success" title="Installed" style="font-size:1.1rem;"></i>`;
+          actionBtnHtml = `<button class="btn btn-outline-secondary btn-sm py-1 rounded-pill action-install-btn" style="font-size: 0.7rem; width: 100px;" data-component="${key}" data-url="${data.url}" data-version="${data.remote}"><i class="bi bi-arrow-repeat me-1"></i>Reinstall</button>`;
         }
       }
 
@@ -778,11 +778,12 @@ async function triggerCheckUpdateFlow() {
             <i class="bi ${details.icon} ${details.color} fs-5"></i>
           </div>
           <div>
-            <h6 class="m-0 fw-bold text-white d-flex align-items-center">${statusIconHtml}${details.name}</h6>
+            <h6 class="m-0 fw-bold text-white">${details.name}</h6>
             <span class="small text-secondary" style="font-size: 0.7rem;">Local: <strong>${data.local}</strong> | Latest: <strong>${data.remote}</strong></span>
           </div>
         </div>
         <div class="d-flex align-items-center gap-2">
+          ${statusIconHtml}
           ${actionBtnHtml}
         </div>
       `;

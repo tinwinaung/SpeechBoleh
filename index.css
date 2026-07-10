@@ -418,7 +418,8 @@ body {
   border-radius: 0 !important;
   background: rgba(10, 15, 30, 0.95) !important;
   backdrop-filter: blur(8px) !important;
-  display: flex;
+  /* No 'display' here — inherits display:none from .loading-overlay base class.
+     JS sets display:flex explicitly when showing the overlay. */
 }
 
 /* ---------------------------------------------------------------
