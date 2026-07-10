@@ -448,9 +448,12 @@ async function checkAndSetupFirstRun() {
       await window.api.setActiveModel(defaultModel);
     }
 
-    // 5. Download Piper default voice model (en_US-joe-medium.onnx) if missing
+    // 5. Download Piper default voice model (from conf.json) if missing
     if (missingPiperVoice) {
-      const defaultVoice = 'en_US-joe-medium.onnx';
+      if (PIPER_VOICE_INFO.length === 0) await initPiperVoices();
+      const defaultVoiceInfo = PIPER_VOICE_INFO.find(v => v.default) || PIPER_VOICE_INFO[0];
+      const defaultVoice = defaultVoiceInfo ? defaultVoiceInfo.file : 'en_US-lessac-medium.onnx';
+
       logStatus(`Downloading default Piper voice model (${defaultVoice})...`, 'system');
       if (descEl) descEl.innerText = `Downloading default voice synthesis model (${defaultVoice}). Please wait...`;
       downloadTitle.innerText = "Downloading Piper Voice";
