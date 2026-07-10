@@ -62,5 +62,31 @@
                 "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin"
             }
         ]
+    },
+    "piper": {
+        "voices": [
+            {
+                "id": "lessac",
+                "name": "Lessac (Medium, Female)",
+                "language": "English (US)",
+                "url": "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx",
+                "file": "en_US-lessac-medium.onnx",
+                "default": true
+            },
+            {
+                "id": "joe",
+                "name": "Joe (Medium, Male)",
+                "language": "English (US)",
+                "url": "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/joe/medium/en_US-joe-medium.onnx",
+                "file": "en_US-joe-medium.onnx"
+            },
+            {
+                "id": "ryan",
+                "name": "Ryan (Medium, Male)",
+                "language": "English (US)",
+                "url": "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/ryan/medium/en_US-ryan-medium.onnx",
+                "file": "en_US-ryan-medium.onnx"
+            }
+        ]
     }
 }

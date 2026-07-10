@@ -7,12 +7,6 @@ const { exec, execFile, execSync, spawn } = require('child_process');
 const { pathToFileURL } = require('url');
 const ffmpeg = require('fluent-ffmpeg');
 
-// Preconfigured Piper Voice ONNX paths relative to HF resolve
-const PIPER_VOICES = {
-  'en_US-lessac-medium.onnx': 'en/en_US/lessac/medium/',
-  'en_US-joe-medium.onnx': 'en/en_US/joe/medium/',
-  'en_US-ryan-medium.onnx': 'en/en_US/ryan/medium/'
-};
 
 // Set up secure custom media protocol to play local audio files in Renderer
 protocol.registerSchemesAsPrivileged([
@@ -239,12 +233,15 @@ function initConf() {
 
 // Load Whisper model configuration from conf.json (single source of truth)
 let whisperModels = [];
+let piperVoices = [];
 try {
   const conf = initConf();
   whisperModels = conf.whisper?.models || [];
+  piperVoices = conf.piper?.voices || [];
   console.log(`[conf.json] Loaded ${whisperModels.length} Whisper model(s).`);
+  console.log(`[conf.json] Loaded ${piperVoices.length} Piper voice(s).`);
 } catch (e) {
-  console.warn('[conf.json] Failed to load Whisper model config:', e.message);
+  console.warn('[conf.json] Failed to load model/voice config:', e.message);
 }
 
 // ----------------------------------------------------
@@ -1052,6 +1049,9 @@ ipcMain.handle('get-available-models', async () => {
 // IPC: Return the full Whisper model list from conf.json
 ipcMain.handle('get-whisper-models', () => whisperModels);
 
+// IPC: Return the full Piper voice list from conf.json
+ipcMain.handle('get-piper-voices', () => piperVoices);
+
 // IPC: Set current active model
 ipcMain.handle('set-active-model', async (event, modelName) => {
   activeModel = modelName;
@@ -1239,13 +1239,15 @@ function downloadUrlToFile(downloadUrl, destPath, onProgress) {
 // IPC: Download Piper voice model (.onnx and .onnx.json) from Hugging Face
 ipcMain.handle('download-voice-model', async (event, voiceName) => {
   const piperBinDir = getAssetPath('bin', 'piper', 'piper');
-  const relativePath = PIPER_VOICES[voiceName];
-  if (!relativePath) {
-    return { success: false, error: `Unknown voice name: ${voiceName}` };
+
+  // Look up the voice entry from conf.json
+  const voiceEntry = piperVoices.find(v => v.file === voiceName);
+  if (!voiceEntry || !voiceEntry.url) {
+    return { success: false, error: `No download URL configured for voice: ${voiceName}` };
   }
 
-  const onnxUrl = `https://huggingface.co/rhasspy/piper-voices/resolve/main/${relativePath}${voiceName}`;
-  const jsonUrl = `https://huggingface.co/rhasspy/piper-voices/resolve/main/${relativePath}${voiceName}.json`;
+  const onnxUrl = voiceEntry.url;
+  const jsonUrl = `${voiceEntry.url}.json`;
 
   const onnxDest = path.join(piperBinDir, voiceName);
   const jsonDest = path.join(piperBinDir, `${voiceName}.json`);
@@ -1255,8 +1257,8 @@ ipcMain.handle('download-voice-model', async (event, voiceName) => {
   }
 
   try {
-    console.log(`[Piper Downloader] Downloading ONNX model: ${voiceName}`);
-    // Download ONNX model (it's the large file, so track progress for this one)
+    console.log(`[Piper Downloader] Downloading ONNX model: ${voiceName} from ${onnxUrl}`);
+    // Download ONNX model (large file — track progress)
     await downloadUrlToFile(onnxUrl, onnxDest, (downloaded, total) => {
       if (mainWindow) {
         mainWindow.webContents.send('voice-download-progress', {
@@ -1269,7 +1271,7 @@ ipcMain.handle('download-voice-model', async (event, voiceName) => {
     });
 
     console.log(`[Piper Downloader] Downloading config JSON for: ${voiceName}`);
-    // Download ONNX.json configuration file (small file, direct download)
+    // Download ONNX.json configuration file (small file)
     await downloadUrlToFile(jsonUrl, jsonDest);
 
     console.log(`[Piper Downloader] Voice ${voiceName} downloaded successfully.`);

@@ -466,23 +466,51 @@ function logStatus(message, type = 'info') {
 }
 
 // ----------------------------------------------------
-// TTS: Populate Voices from System
+// TTS: Populate Voices from conf.json
 // ----------------------------------------------------
+let PIPER_VOICE_INFO = []; // Cached voice list from conf.json
+
+async function initPiperVoices() {
+  try {
+    const voices = await window.api.getPiperVoices();
+    if (!voices || voices.length === 0) {
+      console.warn('[Voices] conf.json returned no Piper voices.');
+      return;
+    }
+    PIPER_VOICE_INFO = voices;
+    console.log(`[Voices] Loaded ${voices.length} Piper voice(s) from conf.json.`);
+  } catch (err) {
+    console.error('[Voices] Failed to load Piper voice list from conf.json:', err);
+  }
+}
+
 async function populateVoices() {
   try {
+    // Ensure voice metadata is loaded
+    if (PIPER_VOICE_INFO.length === 0) await initPiperVoices();
+
     const cachedVoices = await window.api.getVoices();
     console.log('[Voices] Downloaded Piper voices found:', cachedVoices);
 
-    Array.from(voiceSelect.options).forEach(opt => {
-      const isDownloaded = cachedVoices.includes(opt.value);
-      const voiceLabel = opt.value === 'en_US-lessac-medium.onnx' ? 'Lessac (Medium, Female)' :
-        opt.value === 'en_US-joe-medium.onnx' ? 'Joe (Medium, Male)' : 'Ryan (Medium, Male)';
-      if (isDownloaded) {
-        opt.innerText = `${voiceLabel} [Cached]`;
-      } else {
-        opt.innerText = `${voiceLabel} [Cloud Download]`;
-      }
+    // Rebuild the dropdown from conf.json voice list
+    voiceSelect.innerHTML = '';
+    PIPER_VOICE_INFO.forEach(v => {
+      const opt = document.createElement('option');
+      opt.value = v.file;
+      const isCached = cachedVoices.includes(v.file);
+      const suffix = isCached ? '[Cached]' : '[Cloud Download]';
+      const defaultMark = v.default ? ' ★' : '';
+      opt.innerText = `${v.name}${defaultMark} ${suffix}`;
+      if (v.default && !cachedVoices.length) opt.selected = true;
+      voiceSelect.appendChild(opt);
     });
+
+    // Select the first cached voice, or the default if none cached
+    const defaultVoice = PIPER_VOICE_INFO.find(v => cachedVoices.includes(v.file))
+      || PIPER_VOICE_INFO.find(v => v.default)
+      || PIPER_VOICE_INFO[0];
+    if (defaultVoice) voiceSelect.value = defaultVoice.file;
+
     logStatus(`Synced Piper voice models. Cached voices: ${cachedVoices.length}`);
   } catch (err) {
     console.error('Failed to query voices', err);
@@ -529,8 +557,9 @@ async function handleVoiceChange() {
     } catch (err) {
       console.error('[Voice Download Error]', err);
       await showAppAlert(`Voice Download Failed:\n${err.message}\nReverting selection.`);
-      // Revert select back to default Lessac model
-      voiceSelect.value = 'en_US-lessac-medium.onnx';
+      // Revert to default voice from conf.json
+      const defaultVoice = PIPER_VOICE_INFO.find(v => v.default);
+      if (defaultVoice) voiceSelect.value = defaultVoice.file;
       return;
     } finally {
       modelDownloadOverlay.style.setProperty('display', 'none', 'important');

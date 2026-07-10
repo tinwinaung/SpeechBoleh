@@ -58,6 +58,12 @@ contextBridge.exposeInMainWorld('api', {
   getWhisperModels: () => ipcRenderer.invoke('get-whisper-models'),
 
   /**
+   * Get the full Piper voice list (id, name, language, file, url) from conf.json
+   * @returns {Promise<Array<{id: string, name: string, language: string, file: string, url: string, default?: boolean}>>}
+   */
+  getPiperVoices: () => ipcRenderer.invoke('get-piper-voices'),
+
+  /**
    * Switch the current active Whisper model
    * @param {string} modelName - e.g., 'ggml-tiny.bin'
    * @returns {Promise<{success: boolean, activeModel: string}>}
