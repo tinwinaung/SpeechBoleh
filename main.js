@@ -398,25 +398,48 @@ function checkAndInstallMsvc() {
   if (process.platform !== 'win32') return Promise.resolve();
 
   const { dialog } = require('electron');
-  let isInstalled = false;
 
+  // Detect system architecture: arm64 or x64 (ia32 treated as x64)
+  const isArm64 = process.arch === 'arm64';
+  const archKey = isArm64 ? 'arm64' : 'x64';
+  const confArchKey = isArm64 ? 'win_arm64' : 'win_x64';
+
+  // Load download URL from conf.json vc_redist section
+  let downloadUrl = isArm64
+    ? 'https://aka.ms/vc14/vc_redist.arm64.exe'
+    : 'https://aka.ms/vc14/vc_redist.x64.exe';
   try {
-    // Query registry for Visual C++ 2015-2022 Redistributable (x64)
-    execSync('reg query "HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\x64" /v Installed', { stdio: 'ignore' });
+    const conf = initConf();
+    if (conf.vc_redist && conf.vc_redist[confArchKey]) {
+      downloadUrl = conf.vc_redist[confArchKey];
+      console.log(`[System] VC++ Redistributable URL from conf.json (${archKey}): ${downloadUrl}`);
+    }
+  } catch (e) {
+    console.warn('[System] Could not read vc_redist URL from conf.json, using built-in fallback.');
+  }
+
+  const redistFileName = `vc_redist.${archKey}.exe`;
+  const redistLocalPath = getAssetPath('bin', redistFileName);
+  const redistTempPath = path.join(tmpDir, redistFileName);
+
+  let isInstalled = false;
+  try {
+    // Query architecture-specific registry key for VC++ 2015-2022 Redistributable
+    const regKey = isArm64
+      ? 'HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\arm64'
+      : 'HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\x64';
+    execSync(`reg query "${regKey}" /v Installed`, { stdio: 'ignore' });
     isInstalled = true;
   } catch (e) {
     isInstalled = false;
   }
 
   if (isInstalled) {
-    console.log('[System] Microsoft Visual C++ Redistributable runtime check passed.');
+    console.log(`[System] Microsoft Visual C++ Redistributable (${archKey}) runtime check passed.`);
     return Promise.resolve();
   }
 
-  const redistLocalPath = getAssetPath('bin', 'vc_redist.x64.exe');
-  const redistTempPath = path.join(tmpDir, 'vc_redist.x64.exe');
   let finalRedistPath = '';
-
   if (fs.existsSync(redistLocalPath)) {
     finalRedistPath = redistLocalPath;
   } else if (fs.existsSync(redistTempPath)) {
@@ -429,7 +452,7 @@ function checkAndInstallMsvc() {
       buttons: ['Install Now', 'Skip'],
       defaultId: 0,
       title: 'Microsoft Visual C++ Redistributable Required',
-      message: 'This application requires the Microsoft Visual C++ 2015-2022 Redistributable runtime to execute local speech processing models.\n\nIt was not detected on your system. Would you like to launch the installer now?',
+      message: `This application requires the Microsoft Visual C++ 2015-2022 Redistributable (${archKey}) runtime to execute local speech processing models.\n\nIt was not detected on your system. Would you like to launch the installer now?`,
       cancelId: 1
     });
 
@@ -438,20 +461,19 @@ function checkAndInstallMsvc() {
     }
     return Promise.resolve();
   } else {
-    // Both installer files are missing. Offer to download.
+    // Installer not bundled — offer to download from conf.json URL
     const choice = dialog.showMessageBoxSync({
       type: 'warning',
       buttons: ['Download & Install', 'Skip'],
       defaultId: 0,
       title: 'Microsoft Visual C++ Redistributable Required',
-      message: 'This application requires the Microsoft Visual C++ 2015-2022 Redistributable runtime to execute local speech models.\n\nWould you like to download and install it automatically now (approx. 24MB)?',
+      message: `This application requires the Microsoft Visual C++ 2015-2022 Redistributable (${archKey}) runtime to execute local speech models.\n\nWould you like to download and install it automatically now (approx. 24MB)?`,
       cancelId: 1
     });
 
     if (choice === 0) {
-      console.log('[System] Downloading VC++ Redistributable installer...');
-      const downloadUrl = 'https://aka.ms/vs/17/release/vc_redist.x64.exe';
-      
+      console.log(`[System] Downloading VC++ Redistributable (${archKey}) from: ${downloadUrl}`);
+
       return downloadUrlToFile(downloadUrl, redistTempPath)
         .then(() => {
           console.log('[System] VC++ Redistributable download complete.');
@@ -471,7 +493,7 @@ function checkAndInstallMsvc() {
           console.error('[System] Failed to download VC++ Redistributable:', err);
           dialog.showErrorBox(
             'Download Failed',
-            `Failed to download the VC++ Redistributable installer:\n${err.message}\n\nPlease install it manually from: https://aka.ms/vs/17/release/vc_redist.x64.exe`
+            `Failed to download the VC++ Redistributable installer (${archKey}):\n${err.message}\n\nPlease install it manually from:\n${downloadUrl}`
           );
           return Promise.resolve();
         });
