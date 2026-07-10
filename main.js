@@ -1313,11 +1313,19 @@ function downloadUrlToFile(downloadUrl, destPath, onProgress) {
         file.on('finish', () => {
           file.close();
           try {
-            if (fs.existsSync(destPath)) fs.unlinkSync(destPath);
+            // Try atomic rename first (works even when destPath already exists on same drive)
             fs.renameSync(tempDestPath, destPath);
             resolve();
-          } catch (err) {
-            reject(err);
+          } catch (renameErr) {
+            // Rename may fail if destination is locked by a previous installer process.
+            // Fall back to copy + silent temp cleanup.
+            try {
+              fs.copyFileSync(tempDestPath, destPath);
+              try { fs.unlinkSync(tempDestPath); } catch (e) { /* ignore temp cleanup failure */ }
+              resolve();
+            } catch (copyErr) {
+              reject(copyErr);
+            }
           }
         });
       });
