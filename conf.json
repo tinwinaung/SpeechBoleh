@@ -38,18 +38,6 @@
                 "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin"
             },
             {
-                "file": "ggml-whisper-small-myanmar.bin",
-                "name": "Burmese Fine-Tuned Small",
-                "size": "466MB",
-                "url": "https://github.com/tinwinaung/SpeechBoleh/releases/download/whisper-mm-models/ggml-whisper-small-myanmar.bin"
-            },
-            {
-                "file": "ggml-whisper-large-v3-myanmar.bin",
-                "name": "Burmese Fine-Tuned Large V3",
-                "size": "3.1GB",
-                "url": "https://github.com/tinwinaung/SpeechBoleh/releases/download/whisper-mm-models/ggml-whisper-large-v3-myanmar.bin"
-            },
-            {
                 "file": "ggml-medium.bin",
                 "name": "Medium Model",
                 "size": "1.5GB",
@@ -60,6 +48,18 @@
                 "name": "Large V3 Turbo Model",
                 "size": "809MB",
                 "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin"
+            },
+            {
+                "file": "ggml-whisper-small-myanmar.bin",
+                "name": "Myanmar Small (Preview)",
+                "size": "466MB",
+                "url": "https://github.com/tinwinaung/SpeechBoleh/releases/download/whisper-mm-models/ggml-whisper-small-myanmar.bin"
+            },
+            {
+                "file": "ggml-whisper-medium-myanmar.bin",
+                "name": "Myanmar Medium (Preview)",
+                "size": "1.5GB",
+                "url": "https://github.com/tinwinaung/SpeechBoleh/releases/download/whisper-mm-models/ggml-whisper-medium-myanmar.bin"
             }
         ]
     },
