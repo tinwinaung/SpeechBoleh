@@ -15,6 +15,8 @@ let generatedAudioUrl = null;
 let availableModels = [];
 let currentModel = 'ggml-base.bin';
 let lastMicRecordingPath = null; // Persists raw mic file for diagnostics
+let isEventListenersSetup = false; // Guard to prevent duplicate event listener registrations
+
 
 // UI Elements - STT
 const micTab = document.getElementById('mic-tab');
@@ -247,9 +249,20 @@ window.addEventListener('DOMContentLoaded', async () => {
 
       const res = await window.api.installVcRedist();
       if (res && res.success) {
-        if (vcredistStatus) vcredistStatus.innerText = 'Microsoft Visual C++ Redistributable installed successfully! You may now use all speech features.';
+        if (vcredistStatus) vcredistStatus.innerText = 'Microsoft Visual C++ Redistributable installed successfully! Proceeding to application...';
         btnVcInstall.innerHTML = '<i class="bi bi-check-circle-fill me-2"></i>Installed Successfully';
         btnVcInstall.className = btnVcInstall.className.replace('btn-warning', 'btn-success');
+        
+        // Hide Close button so user doesn't interrupt the startup transition
+        if (btnVcClose) {
+          btnVcClose.style.display = 'none';
+        }
+
+        // Wait 1.5s to show success state, then close overlay and proceed
+        setTimeout(async () => {
+          if (vcredistOverlay) vcredistOverlay.style.setProperty('display', 'none', 'important');
+          await runRemainingInitialization();
+        }, 1500);
       } else if (res && res.installerCancelled) {
         // Installer ran but user cancelled or it didn't complete — reset so they can try again
         if (vcredistStatus) vcredistStatus.innerText = 'Installation was not completed. Please install to continue using speech features.';
@@ -301,12 +314,18 @@ window.addEventListener('DOMContentLoaded', async () => {
     return;
   }
 
+  await runRemainingInitialization();
+});
+
+// Helper: Performs/resumes the remaining part of startup initialization after VC++ is verified
+async function runRemainingInitialization() {
+  logStatus('Syncing offline Whisper model weights...', 'info');
   await syncModels();
   setupEventListeners();
 
-  
   const aboutGithubLink = document.getElementById('about-github-link');
   if (aboutGithubLink) {
+    // Re-bind only if event listeners setup hasn't run yet or run independently
     aboutGithubLink.addEventListener('click', (e) => {
       e.preventDefault();
       window.api.openExternalUrl('https://github.com/tinwinaung/SpeechBoleh');
@@ -317,7 +336,8 @@ window.addEventListener('DOMContentLoaded', async () => {
   await checkAndSetupFirstRun();
 
   logStatus('System ready. All offline pipelines successfully loaded.', 'success');
-});
+}
+
 
 // Automatic first-run setup checker
 async function checkAndSetupFirstRun() {
@@ -1029,6 +1049,9 @@ async function handleModelChange() {
 // Event Listeners Registration
 // ----------------------------------------------------
 function setupEventListeners() {
+  if (isEventListenersSetup) return;
+  isEventListenersSetup = true;
+
   // Model Select Dropdown
   modelSelect.addEventListener('change', handleModelChange);
 
